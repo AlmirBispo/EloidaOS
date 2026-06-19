@@ -24,7 +24,7 @@ O **ELOIDA OS** é um kernel cooperativo *bare-metal* projetado para microcontro
 
 ## 📚 Documentação
 
-Acesse a documentação completa em HTML no dubdiretorio
+Acesse a documentação completa em HTML no sub diretorio
 
 
 
