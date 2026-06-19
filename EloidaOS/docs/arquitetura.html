@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arquitetura — ELOIDA OS</title>
+<style>
+:root{--bg:#0d1117;--fg:#c9d1d9;--accent:#58a6ff;--card:#161b22;--border:#30363d;--code:#1f2937;--green:#7ee787;--orange:#ffa657}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--fg);line-height:1.7;padding:2rem}
+.wrap{max-width:1000px;margin:0 auto}
+nav{margin-bottom:2rem;padding:1rem;background:var(--card);border-radius:8px;border:1px solid var(--border)}
+nav a{color:var(--accent);margin-right:1.5rem;text-decoration:none}
+h1{color:var(--accent);font-size:2.5rem;margin-bottom:1rem}
+h2{color:var(--green);margin:2rem 0 1rem;border-left:4px solid var(--accent);padding-left:1rem}
+section{background:var(--card);padding:2rem;border-radius:12px;border:1px solid var(--border);margin-bottom:2rem}
+.diagram{background:#000;padding:1.5rem;border-radius:8px;font-family:'Courier New',monospace;color:var(--green);white-space:pre;overflow-x:auto;font-size:.85rem;line-height:1.4;border:1px solid var(--border)}
+code{background:var(--code);padding:2px 6px;border-radius:4px;color:var(--orange)}
+pre{background:#000;padding:1rem;border-radius:8px;overflow-x:auto;margin:1rem 0;border-left:3px solid var(--green);color:#c9d1d9}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin:1rem 0}
+.layer{background:var(--bg);padding:1.5rem;border-radius:8px;border-top:4px solid var(--accent)}
+.layer h3{color:var(--orange);margin-bottom:.5rem}
+table{width:100%;border-collapse:collapse;margin:1rem 0}
+th,td{padding:.6rem;border:1px solid var(--border);text-align:left}
+th{background:var(--code);color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+<a href="index.html">← Início</a>
+<a href="fundamentos.html">← Fundamentos</a>
+<a href="implementacao.html">Implementação →</a>
+<a href="expansao.html">Expansão</a>
+</nav>
+
+<h1>🏗️ Arquitetura do ELOIDA OS</h1>
+
+<section>
+<h2>1. Visão Geral em Camadas</h2>
+<div class="diagram">
+┌─────────────────────────────────────────────────────────────┐
+│                  APLICAÇÃO (TASKS 0-11)                     │
+│  task0  task1  task2  task3  task4 ... task11               │
+│ (ADC)  (Filtro)(PWM) (Status)(...)  (...)                   │
+└───────────────────────┬─────────────────────────────────────┘
+                        │ invoca via
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│              DISPATCHER  (run + TASK_TABLE)                 │
+│  const TaskFunc TASK_TABLE[12] = { task0, task1, ... }      │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 SCHEDULER  (process)                        │
+│  if (++COUNTS[i] &gt;= PRIME_NUMS[i]) { PROCESS[i] = 1; }      │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│            IPC — SharedData (memória compartilhada)         │
+│  { sensor_raw, sensor_filtered, actuator_cmd, ... }         │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│              HARDWARE  (CH32V307VCT6 — RISC-V)              │
+│  GPIO · ADC · PWM · I2C · SPI · UART · TIMERS               │
+└─────────────────────────────────────────────────────────────┘
+</div>
+</section>
+
+<section>
+<h2>2. Estruturas de Dados do Kernel</h2>
+
+<div class="grid">
+<div class="layer">
+<h3>🗂️ PROCESS[255]</h3>
+<p>Array de flags <code>u8</code>. Quando <code>PROCESS[i] == 1</code>, a tarefa <em>i</em> está pronta para executar no ciclo atual.</p>
+<p><strong>Tamanho:</strong> 255 bytes em RAM</p>
+</div>
+<div class="layer">
+<h3>🔢 COUNTS[255]</h3>
+<p>Contadores <code>u32</code> incrementados a cada iteração do main loop. Quando atingem o limite, disparam a tarefa.</p>
+<p><strong>Tamanho:</strong> 1020 bytes em RAM</p>
+</div>
+<div class="layer">
+<h3>🧮 PRIME_NUMS[255]</h3>
+<p>Os primeiros 255 números primos, de 2 até 1627. Usados como limites para os 3 primeiros processos críticos.</p>
+<p><strong>Tamanho:</strong> 1020 bytes em flash (const)</p>
+</div>
+<div class="layer">
+<h3>📡 SHARED (SharedData)</h3>
+<p>Estrutura global de IPC com campos tipados. Preenchida sequencialmente pelas tarefas 0, 1 e 2.</p>
+<p><strong>Tamanho:</strong> ~44 bytes em RAM</p>
+</div>
+</div>
+</section>
+
+<section>
+<h2>3. Ciclo de Vida de uma Tarefa</h2>
+<div class="diagram">
+  main loop (infinito)
+       │
+       ▼
+  ┌─────────┐    incrementa    ┌──────────────┐
+  │ for i   │ ───────────────► │ COUNTS[i]++  │
+  └─────────┘                  └──────┬───────┘
+                                      │
+                                      ▼
+                          ┌──────────────────────┐
+                          │ COUNTS[i] &gt;= limite? │
+                          └──────────┬───────────┘
+                            SIM │        │ NÃO
+                                ▼        ▼
+                    ┌──────────────┐   (pula)
+                    │ PROCESS[i]=1 │
+                    │ COUNTS[i]=0  │
+                    └──────┬───────┘
+                           ▼
+                    ┌──────────────────────┐
+                    │ run(i) → TASK_TABLE  │
+                    │       [i]()          │
+                    └──────┬───────────────┘
+                           ▼
+                    ┌──────────────────────┐
+                    │ destroy(i)           │
+                    │ PROCESS[i] = 0       │
+                    └──────────────────────┘
+</div>
+</section>
+
+<section>
+<h2>4. Pipeline de Dados (Exemplo Real)</h2>
+<p>O código original demonstra um pipeline clássico de controle embarcado:</p>
+<table>
+<tr><th>Task</th><th>Função</th><th>Escreve em</th><th>Lê de</th></tr>
+<tr><td>task0</td><td>Leitura de sensor (ADC/I2C)</td><td><code>sensor_raw</code></td><td>—</td></tr>
+<tr><td>task1</td><td>Filtro matemático (×3/2)</td><td><code>sensor_filtered</code></td><td><code>sensor_raw</code></td></tr>
+<tr><td>task2</td><td>Decisão de atuador (PWM/Ré)</td><td><code>actuator_cmd</code></td><td><code>sensor_filtered</code></td></tr>
+<tr><td>task3</td><td>Sinalização de status</td><td><code>system_status</code></td><td>—</td></tr>
+</table>
+<p style="margin-top:1rem">Como as tasks executam em ordem crescente de índice dentro do loop, e os períodos são primos diferentes, a <strong>ordem de execução natural</strong> garante que task0 sempre atualiza antes de task1 ler — <em>sem necessidade de barreiras explícitas</em>.</p>
+</section>
+
+<section>
+<h2>5. API do Kernel</h2>
+<pre>
+void process_create(u8 pointer);              // Inicializa um processo
+void process(u32 Limit_count, u8 pointer);    // Incrementa e verifica
+void run(u8 any_process);                     // Despacha via tabela
+void destroy(u8 any_process);                 // Limpa a flag
+</pre>
+<p>Essas 4 funções formam a <strong>ABI mínima</strong> do ELOIDA OS — tudo o que o usuário precisa saber para usar o kernel.</p>
+</section>
+
+<section>
+<h2>6. Por que não preemptivo?</h2>
+<p>A escolha por um scheduler <strong>cooperativo</strong> (não preemptivo) é intencional e fundamentada:</p>
+<ul style="margin-left:2rem;margin-top:.5rem">
+<li>✅ Elimina necessidade de salvamento de contexto (economiza ciclos)</li>
+<li>✅ Elimina condições de corrida no IPC (economia de mutexes)</li>
+<li>✅ Compatível com qualquer toolchain RISC-V sem assembly customizado</li>
+<li>✅ Previsibilidade total: cada tarefa sabe exatamente quando vai rodar</li>
+<li>⚠️ Limitação: tarefas não podem bloquear (usar polling ou flags)</li>
+</ul>
+</section>
+</div>
+</body>
+</html>

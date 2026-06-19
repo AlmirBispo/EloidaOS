@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Implementação — ELOIDA OS</title>
+<style>
+:root{--bg:#0d1117;--fg:#c9d1d9;--accent:#58a6ff;--card:#161b22;--border:#30363d;--code:#1f2937;--green:#7ee787;--orange:#ffa657}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--fg);line-height:1.7;padding:2rem}
+.wrap{max-width:950px;margin:0 auto}
+nav{margin-bottom:2rem;padding:1rem;background:var(--card);border-radius:8px;border:1px solid var(--border)}
+nav a{color:var(--accent);margin-right:1.5rem;text-decoration:none}
+h1{color:var(--accent);font-size:2.5rem;margin-bottom:1rem}
+h2{color:var(--green);margin:2rem 0 1rem;border-left:4px solid var(--accent);padding-left:1rem}
+h3{color:var(--orange);margin:1.5rem 0 .5rem}
+section{background:var(--card);padding:2rem;border-radius:12px;border:1px solid var(--border);margin-bottom:2rem}
+pre{background:#000;padding:1rem;border-radius:8px;overflow-x:auto;margin:1rem 0;border-left:3px solid var(--green);color:#c9d1d9;font-family:'Courier New',monospace;font-size:.9rem}
+code{background:var(--code);padding:2px 6px;border-radius:4px;color:var(--orange)}
+.step{display:flex;gap:1rem;margin:1.5rem 0;padding:1rem;background:var(--bg);border-radius:8px;border-left:3px solid var(--accent)}
+.step-num{background:var(--accent);color:#000;font-weight:bold;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.2rem}
+.warn{background:rgba(255,166,87,0.1);border-left:3px solid var(--orange);padding:1rem;border-radius:8px;margin:1rem 0}
+.ok{background:rgba(126,231,135,0.1);border-left:3px solid var(--green);padding:1rem;border-radius:8px;margin:1rem 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+<a href="index.html">← Início</a>
+<a href="fundamentos.html">Fundamentos</a>
+<a href="arquitetura.html">Arquitetura</a>
+<a href="expansao.html">Expansão →</a>
+</nav>
+
+<h1>🔧 Guia de Implementação</h1>
+
+<section>
+<h2>1. Pré-requisitos</h2>
+<div class="step"><div class="step-num">1</div><div><strong>Hardware:</strong> Placa CH32V307VCT6 (ou qualquer RISC-V compatível). Também funciona em STM32, ESP32-C3, etc.</div></div>
+<div class="step"><div class="step-num">2</div><div><strong>Toolchain:</strong> <code>riscv64-unknown-elf-gcc</code> ou MounRiver Studio (para CH32V).</div></div>
+<div class="step"><div class="step-num">3</div><div><strong>Debugger:</strong> WCH-LinkE (RISC-V) ou J-Link com suporte RISC-V.</div></div>
+<div class="step"><div class="step-num">4</div><div><strong>Editor:</strong> VSCode + extensão Embedded IDE, ou Eclipse CDT.</div></div>
+</section>
+
+<section>
+<h2>2. Estrutura mínima do projeto</h2>
+<pre>
+projeto/
+├── src/
+│   ├── main.c                  (seu aplicativo)
+│   ├── eloida_kernel.c         (copie o kernel aqui)
+│   └── eloida_kernel.h         (header opcional)
+├── startup/
+│   └── startup_ch32v307.S      (arquivo de startup do MCU)
+├── linker/
+│   └── ch32v307.ld             (script de linker)
+└── Makefile
+</pre>
+</section>
+
+<section>
+<h2>3. Primeiro exemplo funcional</h2>
+<h3>3.1 Copie o kernel para <code>eloida_kernel.c</code></h3>
+<p>Cole o conteúdo integral de <code>ELOIDA-OS-COMPARTILHAMENTO-MEMORIA.c</code>.</p>
+
+<h3>3.2 Crie sua própria tarefa</h3>
+<pre>
+// minha_task.c
+#include "eloida_kernel.h"
+
+// Exemplo: pisca LED no pino PA5
+extern SharedData SHARED;  // declarado no kernel
+
+void task4(void) {
+    // Sua lógica customizada
+    GPIOA-&gt;ODR ^= GPIO_PIN_5;   // toggle LED
+    SHARED.debug_log[0] = 'T';
+    SHARED.debug_log[1] = '4';
+}
+</pre>
+
+<h3>3.3 Inicialize o hardware antes do main loop</h3>
+<pre>
+void SystemClock_Config(void) {
+    // Configure o clock para 144 MHz (CH32V307)
+    // ...
+}
+
+void GPIO_Init(void) {
+    // Habilita clock do GPIOA
+    RCC-&gt;APB2PCENR |= RCC_APB2Periph_GPIOA;
+    // Configura PA5 como saída push-pull
+    GPIOA-&gt;CFGLR &amp;= ~(0xF &lt;&lt; (5*4));
+    GPIOA-&gt;CFGLR |=  (0x3 &lt;&lt; (5*4));
+}
+
+int main(void) {
+    SystemClock_Config();
+    GPIO_Init();
+    
+    // Loop principal do ELOIDA OS (já vem no kernel)
+    while(1) {
+        for (u8 i = 0; i &lt; MAX_PROCESSES; i++) {
+            process((i &lt; 3) ? PRIME_NUMS[i] : (1000 + i), i);
+            run(i);
+            destroy(i);
+        }
+    }
+}
+</pre>
+</section>
+
+<section>
+<h2>4. Compilando com Makefile</h2>
+<pre>
+CC      = riscv64-unknown-elf-gcc
+CFLAGS  = -march=rv32imac -mabi=ilp32 -O2 -Wall
+LDFLAGS = -T linker/ch32v307.ld -nostdlib -Wl,--gc-sections
+
+SRCS = src/main.c src/eloida_kernel.c src/minhas_tasks.c \
+       startup/startup_ch32v307.S
+
+OBJS = $(SRCS:.c=.o)
+OBJS := $(OBJS:.S=.o)
+
+all: eloida.elf eloida.bin
+
+eloida.elf: $(OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
+
+eloida.bin: eloida.elf
+	riscv64-unknown-elf-objcopy -O binary $&lt; $@
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $&lt; -o $@
+
+flash: eloida.bin
+	wch-openocd -f wch-riscv.cfg -c "program eloida.bin verify reset exit"
+
+clean:
+	rm -f src/*.o startup/*.o eloida.elf eloida.bin
+</pre>
+</section>
+
+<section>
+<h2>5. Gravando no MCU</h2>
+<h3>Opção A: WCH-LinkE (recomendado para CH32V)</h3>
+<pre>
+# Via MounRiver Studio (Windows/Linux)
+# 1. Importar projeto
+# 2. Build → Clean + Build
+# 3. Debug → Launch Mode
+
+# Via wch-openocd (linha de comando)
+wch-openocd -f wch-riscv.cfg \
+  -c "program build/eloida.bin 0x00000000 verify reset exit"
+</pre>
+
+<h3>Opção B: DFU (bootloader USB do CH32V307)</h3>
+<pre>
+# Colocar o MCU em modo DFU (pressionar BOOT0 + RESET)
+wchisp flash eloida.bin
+</pre>
+</section>
+
+<section>
+<h2>6. Depurando tarefas</h2>
+<div class="ok">
+<strong>✅ Use o campo <code>debug_log[16]</code> da <code>SharedData</code></strong><br>
+Cada tarefa pode escrever mensagens curtas que serão enviadas via UART por uma task dedicada.
+</div>
+
+<pre>
+// task10.c — Logger UART
+void task10(void) {
+    static u8 last_idx = 0;
+    if (SHARED.debug_log[0] != 0) {
+        UART_Send(SHARED.debug_log, 16);
+        memset(SHARED.debug_log, 0, 16);
+    }
+}
+</pre>
+
+<div class="warn">
+<strong>⚠️ Erros comuns:</strong>
+<ul style="margin-left:1.5rem;margin-top:.5rem">
+<li>Esquecer de habilitar o clock do periférico (RCC)</li>
+<li>Tarefas que bloqueiam (ex: <code>delay_ms</code>) — use polling</li>
+<li>Modificar <code>SHARED</code> fora de uma task (quebra o modelo cooperativo)</li>
+<li>Usar <code>printf</code> sem UART configurado trava o sistema</li>
+</ul>
+</div>
+</section>
+
+<section>
+<h2>7. Checklist de validação</h2>
+<table style="width:100%;border-collapse:collapse">
+<tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem">☐</td><td>LED pisca após flash</td></tr>
+<tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem">☐</td><td>task0 atualiza <code>sensor_raw</code> (verificar via debugger)</td></tr>
+<tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem">☐</td><td>task1 calcula <code>sensor_filtered</code> corretamente</td></tr>
+<tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem">☐</td><td>task2 comanda atuador conforme esperado</td></tr>
+<tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem">☐</td><td><code>debug_log</code> recebe mensagens via UART</td></tr>
+<tr><td style="padding:.5rem">☐</td><td>Sistema roda 24h sem travar (teste de estabilidade)</td></tr>
+</table>
+</section>
+</div>
+</body>
+</html>

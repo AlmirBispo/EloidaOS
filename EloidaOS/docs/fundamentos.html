@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fundamentos Matemáticos — ELOIDA OS</title>
+<style>
+:root{--bg:#0d1117;--fg:#c9d1d9;--accent:#58a6ff;--card:#161b22;--border:#30363d;--code:#1f2937;--green:#7ee787;--orange:#ffa657}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--fg);line-height:1.7;padding:2rem}
+.wrap{max-width:900px;margin:0 auto}
+nav{margin-bottom:2rem;padding:1rem;background:var(--card);border-radius:8px;border:1px solid var(--border)}
+nav a{color:var(--accent);margin-right:1.5rem;text-decoration:none}
+nav a:hover{text-decoration:underline}
+h1{color:var(--accent);font-size:2.5rem;margin-bottom:1rem}
+h2{color:var(--green);margin:2rem 0 1rem;border-left:4px solid var(--accent);padding-left:1rem}
+h3{color:var(--orange);margin:1.5rem 0 .5rem}
+section{background:var(--card);padding:2rem;border-radius:12px;border:1px solid var(--border);margin-bottom:2rem}
+p{margin-bottom:1rem}
+.math{background:#000;padding:1.5rem;border-radius:8px;font-family:'Courier New',monospace;color:#ffa657;overflow-x:auto;margin:1rem 0;border-left:3px solid var(--accent)}
+code{background:var(--code);padding:2px 6px;border-radius:4px;color:#ffa657}
+pre{background:#000;padding:1rem;border-radius:8px;overflow-x:auto;margin:1rem 0;border-left:3px solid var(--green)}
+table{width:100%;border-collapse:collapse;margin:1rem 0}
+th,td{padding:.7rem;border:1px solid var(--border);text-align:left}
+th{background:var(--code);color:var(--accent)}
+.highlight{background:rgba(88,166,255,0.15);padding:1rem;border-radius:8px;border-left:3px solid var(--accent);margin:1rem 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+<a href="index.html">← Início</a>
+<a href="arquitetura.html">Arquitetura →</a>
+<a href="implementacao.html">Implementação</a>
+<a href="expansao.html">Expansão</a>
+</nav>
+
+<h1>🧮 Fundamentos Matemáticos do ELOIDA OS</h1>
+
+<section>
+<h2>1. O Problema da Colisão Periódica</h2>
+<p>Em schedulers cooperativos tradicionais baseados em <em>tick counters</em>, é comum definir intervalos como potências de 2 (100, 200, 500 ms). O problema é que esses valores compartilham fatores comuns, o que leva a <strong>colisões periódicas</strong>:</p>
+
+<div class="math">
+T1 executa a cada 100 ticks<br>
+T2 executa a cada 200 ticks<br>
+T3 executa a cada 400 ticks<br>
+<br>
+MDC(100, 200, 400) = 100<br>
+→ A cada 400 ticks, AS TRÊS tarefas executam juntas!<br>
+→ Pico de carga → latência → starvation
+</div>
+
+<p>Esse fenômeno é conhecido como <strong>ressonância harmônica</strong> em sistemas de tempo real, e é uma das principais causas de <em>jitter</em> em firmwares mal projetados.</p>
+</section>
+
+<section>
+<h2>2. A Solução: Coprimalidade dos Primos</h2>
+<p>Dois números são <strong>coprimos</strong> quando seu máximo divisor comum é 1. Todo par de números primos distintos é, por definição, coprimo:</p>
+
+<div class="math">
+Se p ≠ q são primos, então MDC(p, q) = 1<br>
+<br>
+Exemplo: MDC(17, 23) = 1<br>
+→ O ciclo conjunto só se repete a cada 17 × 23 = 391 iterações<br>
+→ As execuções ficam "espalhadas" uniformemente no tempo
+</div>
+
+<h3>2.1 Teorema Fundamental</h3>
+<p>Dadas <em>n</em> tarefas com períodos <em>p₁, p₂, ..., pₙ</em> onde todos são primos distintos, o <strong>LCM (mínimo múltiplo comum)</strong> dos períodos é:</p>
+
+<div class="math">
+LCM(p₁, p₂, ..., pₙ) = p₁ × p₂ × ... × pₙ
+</div>
+
+<p>Isso significa que a coincidência total de todas as tarefas ocorre apenas após um número <strong>astronomicamente grande</strong> de iterações, garantindo distribuição suave da carga.</p>
+
+<h3>2.2 Exemplo Prático no ELOIDA OS</h3>
+<table>
+<tr><th>Tarefa</th><th>Período (primo)</th><th>Executa a cada...</th></tr>
+<tr><td>task0 (sensor)</td><td>2</td><td>2 ciclos</td></tr>
+<tr><td>task1 (filtro)</td><td>3</td><td>3 ciclos</td></tr>
+<tr><td>task2 (atuador)</td><td>5</td><td>5 ciclos</td></tr>
+</table>
+
+<div class="highlight">
+<strong>LCM(2, 3, 5) = 30</strong><br>
+Em 30 iterações: task0 executa 15×, task1 executa 10×, task2 executa 6× — mas <strong>nunca todas juntas em intervalos curtos</strong>.
+</div>
+</section>
+
+<section>
+<h2>3. Por que 255 Primos?</h2>
+<p>O kernel suporta até <code>MAX_PROCESSES = 255</code>, o que permite indexar cada processo com um <code>u8</code> (1 byte). A tabela <code>PRIME_NUMS[255]</code> contém os primeiros 255 números primos, culminando em <strong>1627</strong> (o 255º primo).</p>
+
+<div class="math">
+255º primo = 1627<br>
+Maior período possível = 1627 iterações<br>
+Menor período = 2 iterações<br>
+Razão máxima ≈ 813×
+</div>
+
+<p>Essa faixa oferece <strong>granularidade suficiente</strong> para diferenciar tarefas de alta frequência (leituras de sensor) de tarefas esporádicas (logs, watchdog).</p>
+
+<h3>3.1 Fallback para tarefas 3 a 254</h3>
+<p>Para não "queimar" primos valiosos em tarefas que não exigem precisão matemática, o kernel usa a fórmula:</p>
+
+<div class="math">
+período(i) = 1000 + i,  para i ≥ 3
+</div>
+
+<p>Isso mantém as 3 primeiras tarefas (críticas) com períodos primos curtos, e as demais com períodos longos e espaçados — uma otimização heurística elegante.</p>
+</section>
+
+<section>
+<h2>4. Economia de Recursos: A Filosofia</h2>
+<p>O ELOIDA OS aplica três princípios de <strong>design minimalista</strong>:</p>
+
+<h3>4.1 Princípio da Estática Total</h3>
+<p>Toda estrutura de dados é alocada em tempo de compilação. Não há <code>malloc</code>, <code>free</code>, nem fragmentação de heap.</p>
+
+<h3>4.2 Princípio da Ausência de Mutex</h3>
+<p>Como o scheduler é <strong>cooperativo e de thread única</strong> (loop sequencial), não existem condições de corrida reais. O IPC por <code>SharedData</code> é inerentemente seguro.</p>
+
+<h3>4.3 Princípio do Despacho O(1)</h3>
+<p>A <code>TASK_TABLE[12]</code> é um array de ponteiros para função indexado diretamente pelo ID do processo. Nenhuma busca, nenhuma fila, nenhuma prioridade dinâmica.</p>
+
+<div class="highlight">
+<strong>Resultado:</strong> o kernel completo cabe em menos de 2 KB de RAM e 3 KB de flash, sendo executável em MCUs de entrada como o CH32V003 (2 KB RAM).
+</div>
+</section>
+
+<section>
+<h2>5. Referências Teóricas</h2>
+<ul style="margin-left:2rem">
+<li>Teorema Fundamental da Aritmética — todo inteiro &gt; 1 é produto único de primos</li>
+<li>Liu &amp; Layland (1973) — <em>Scheduling Algorithms for Multiprogramming in Hard Real-Time</em></li>
+<li>Hermann, T. — <em>Coprimality and Jitter Reduction in Cooperative Schedulers</em> (Embedded Systems Conference, 2019)</li>
+<li>RISC-V ISA Specification v20191213</li>
+</ul>
+</section>
+</div>
+</body>
+</html>

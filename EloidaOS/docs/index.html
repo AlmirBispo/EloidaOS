@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ELOIDA OS — Sistema Operacional por Números Primos</title>
+<style>
+:root{--bg:#0d1117;--fg:#c9d1d9;--accent:#58a6ff;--card:#161b22;--border:#30363d;--code:#1f2937}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--fg);line-height:1.7;padding:2rem}
+header{max-width:900px;margin:0 auto 3rem;text-align:center;padding:3rem 1rem;border-bottom:1px solid var(--border)}
+h1{font-size:3rem;background:linear-gradient(90deg,#58a6ff,#7ee787);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:.5rem}
+.tagline{font-size:1.2rem;color:#8b949e;font-style:italic}
+nav{display:flex;flex-wrap:wrap;gap:1rem;justify-content:center;margin:2rem 0}
+nav a{padding:.8rem 1.5rem;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--accent);text-decoration:none;transition:.2s}
+nav a:hover{background:#1f6feb;color:#fff;border-color:#1f6feb;transform:translateY(-2px)}
+section{max-width:900px;margin:2rem auto;background:var(--card);padding:2rem;border-radius:12px;border:1px solid var(--border)}
+h2{color:var(--accent);margin-bottom:1rem;border-bottom:2px solid var(--border);padding-bottom:.5rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1rem;margin-top:1rem}
+.feature{background:var(--bg);padding:1.5rem;border-radius:8px;border-left:3px solid var(--accent)}
+.feature h3{color:#7ee787;margin-bottom:.5rem}
+code{background:var(--code);padding:2px 6px;border-radius:4px;color:#ffa657}
+footer{text-align:center;padding:2rem;color:#8b949e;font-size:.9rem}
+</style>
+</head>
+<body>
+<header>
+<h1>🌿 ELOIDA OS</h1>
+<p class="tagline">Sistema Operacional baseado em números primos para economia extrema de recursos</p>
+<p style="margin-top:1rem;color:#8b949e">Autor: <strong>Almir Bispo</strong> · RISC-V · CH32V307VCT6 · 2026</p>
+</header>
+
+<nav>
+<a href="fundamentos.html">🧮 Fundamentos</a>
+<a href="arquitetura.html">🏗️ Arquitetura</a>
+<a href="implementacao.html">🔧 Implementação</a>
+<a href="expansao.html">📈 Expansão</a>
+<a href="https://github.com/SEU-USUARIO/ELOIDA-OS">⭐ GitHub</a>
+</nav>
+
+<section>
+<h2>🎯 Propósito</h2>
+<p>O ELOIDA OS nasceu da necessidade de executar múltiplas tarefas concorrentes em microcontroladores com poucos kilobytes de RAM, <strong>sem recorrer a RTOS tradicionais</strong> que exigem pilhas separadas, troca de contexto e alocação dinâmica.</p>
+<p style="margin-top:1rem">A sacada: usar <code>números primos</code> como intervalos de despacho. Como dois primos distintos são sempre <em>coprimes</em> (MDC = 1), duas tarefas jamais entram em "ressonância" — eliminando o fenômeno de <strong>colisão periódica</strong> que aflige schedulers baseados em potências de 2.</p>
+</section>
+
+<section>
+<h2>✨ Características</h2>
+<div class="grid">
+<div class="feature"><h3>⚡ Zero Overhead</h3><p>Tabela de despacho estática resolvida em tempo de compilação. Sem ponteiros de pilha, sem salvamento de contexto.</p></div>
+<div class="feature"><h3>🔒 IPC Seguro</h3><p>Memória compartilhada tipada (<code>SharedData</code>). Como o scheduler é cooperativo e determinístico, mutexes são desnecessários.</p></div>
+<div class="feature"><h3>📐 255 Processos</h3><p>Suporta até 255 tarefas simultâneas com apenas 255 bytes de flags + 1 KB de contadores.</p></div>
+<div class="feature"><h3>🧠 Matemática Pura</h3><p>Os primeiros 255 números primos pré-computados garantem distribuição ótima de CPU.</p></div>
+<div class="feature"><h3>🎛️ Bare-Metal</h3><p>Roda direto no CH32V307VCT6 (RISC-V) sem dependências externas. Portável para qualquer MCU.</p></div>
+<div class="feature"><h3>📦 12 Tarefas Nativas</h3><p>Tabela inicial com 12 slots: sensor → filtro → atuador → status + 8 customizáveis.</p></div>
+</div>
+</section>
+
+<section>
+<h2>📊 Números do kernel</h2>
+<table style="width:100%;border-collapse:collapse;margin-top:1rem">
+<tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem"><strong>RAM utilizada (flags)</strong></td><td>255 bytes</td></tr>
+<tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem"><strong>RAM utilizada (contadores)</strong></td><td>1020 bytes (255 × 4)</td></tr>
+<tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem"><strong>ROM (tabela de primos)</strong></td><td>1020 bytes (flash)</td></tr>
+<tr style="border-bottom:1px solid var(--border)"><td style="padding:.5rem"><strong>Tempo de despacho</strong></td><td>O(1) — acesso direto por índice</td></tr>
+<tr><td style="padding:.5rem"><strong>Latência IPC</strong></td><td>0 ciclos (ponteiro direto)</td></tr>
+</table>
+</section>
+
+<footer>
+<p>ELOIDA OS © 2026 Almir Bispo · Documentação gerada em HTML estático</p>
+<p>Feito com ❤️ para a comunidade RISC-V brasileira</p>
+</footer>
+</body>
+</html>

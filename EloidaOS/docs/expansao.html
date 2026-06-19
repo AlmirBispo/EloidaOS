@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expansão — ELOIDA OS</title>
+<style>
+:root{--bg:#0d1117;--fg:#c9d1d9;--accent:#58a6ff;--card:#161b22;--border:#30363d;--code:#1f2937;--green:#7ee787;--orange:#ffa657;--red:#ff7b72}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--fg);line-height:1.7;padding:2rem}
+.wrap{max-width:950px;margin:0 auto}
+nav{margin-bottom:2rem;padding:1rem;background:var(--card);border-radius:8px;border:1px solid var(--border)}
+nav a{color:var(--accent);margin-right:1.5rem;text-decoration:none}
+h1{color:var(--accent);font-size:2.5rem;margin-bottom:1rem}
+h2{color:var(--green);margin:2rem 0 1rem;border-left:4px solid var(--accent);padding-left:1rem}
+h3{color:var(--orange);margin:1.5rem 0 .5rem}
+section{background:var(--card);padding:2rem;border-radius:12px;border:1px solid var(--border);margin-bottom:2rem}
+pre{background:#000;padding:1rem;border-radius:8px;overflow-x:auto;margin:1rem 0;border-left:3px solid var(--green);color:#c9d1d9;font-family:'Courier New',monospace;font-size:.9rem}
+code{background:var(--code);padding:2px 6px;border-radius:4px;color:var(--orange)}
+.idea{background:var(--bg);padding:1.5rem;border-radius:8px;margin:1rem 0;border-left:4px solid var(--green)}
+.idea h3{margin-top:0}
+.diff{background:#2d1b1b;border-left:3px solid var(--red)}
+.diff-add{color:var(--green)}
+.diff-del{color:var(--red)}
+.roadmap{list-style:none;padding:0}
+.roadmap li{padding:1rem;background:var(--bg);border-radius:8px;margin:.5rem 0;border-left:3px solid var(--accent);display:flex;gap:1rem;align-items:center}
+.badge{padding:.2rem .6rem;border-radius:4px;font-size:.8rem;font-weight:bold}
+.b-easy{background:#1f6feb;color:#fff}
+.b-med{background:var(--orange);color:#000}
+.b-hard{background:var(--red);color:#fff}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+<a href="index.html">← Início</a>
+<a href="fundamentos.html">Fundamentos</a>
+<a href="arquitetura.html">Arquitetura</a>
+<a href="implementacao.html">Implementação</a>
+</nav>
+
+<h1>📈 Como Expandir o ELOIDA OS</h1>
+
+<section>
+<h2>1. Filosofia de Expansão</h2>
+<p>O ELOIDA OS foi projetado para crescer <strong>sem quebrar sua essência minimalista</strong>. Toda expansão deve respeitar três regras:</p>
+<div class="idea">
+<h3>📏 Regras de Ouro</h3>
+<ol style="margin-left:1.5rem">
+<li><strong>Nenhuma alocação dinâmica</strong> — tudo estático em compilação</li>
+<li><strong>Nenhuma premptividade</strong> — tarefas sempre cooperativas</li>
+<li><strong>Nenhuma abstração desnecessária</strong> — se dá pra fazer em C direto, faça</li>
+</ol>
+</div>
+</section>
+
+<section>
+<h2>2. Aumentando o número de tarefas nativas (12 → N)</h2>
+<p>A <code>TASK_TABLE</code> tem 12 slots. Para expandir:</p>
+<pre>
+<span class="diff-del">#define TASK_COUNT 12</span>
+<span class="diff-add">#define TASK_COUNT 32</span>
+
+// Adicione novas funções
+void task12(void) { /* ... */ }
+void task13(void) { /* ... */ }
+// ... até task31
+
+const TaskFunc TASK_TABLE[TASK_COUNT] = {
+    task0,  task1,  task2,  task3,  task4,  task5,
+    task6,  task7,  task8,  task9,  task10, task11,
+    <span class="diff-add">task12, task13, task14, task15, task16, task17,
+    task18, task19, task20, task21, task22, task23,
+    task24, task25, task26, task27, task28, task29,
+    task30, task31</span>
+};
+
+// Ajuste o fallback no run()
+void run(u8 any_process) {
+    if (any_process &lt; MAX_PROCESSES &amp;&amp; PROCESS[any_process] == 1) {
+        <span class="diff-del">if (any_process &lt; 12)</span>
+        <span class="diff-add">if (any_process &lt; TASK_COUNT)</span>
+            TASK_TABLE[any_process]();
+    }
+}
+</pre>
+</section>
+
+<section>
+<h2>3. Adicionando prioridades (extensão opcional)</h2>
+<p>O kernel original não tem prioridades — todas as tarefas são iguais. Para adicionar um sistema simples de <strong>prioridades por peso</strong>:</p>
+<pre>
+typedef struct {
+    TaskFunc func;
+    u8 priority;    // 1 = baixa, 10 = alta
+    u8 enabled;     // 0 = desabilitada
+} TaskEntry;
+
+TaskEntry TASK_TABLE[12] = {
+    {task0, 10, 1},  // sensor: alta prioridade
+    {task1,  8, 1},  // filtro
+    {task2,  9, 1},  // atuador
+    {task3,  3, 1},  // status: baixa
+    // ...
+};
+
+void run(u8 i) {
+    if (PROCESS[i] &amp;&amp; TASK_TABLE[i].enabled) {
+        TASK_TABLE[i].func();
+    }
+}
+</pre>
+<div class="idea">
+<h3>💡 Ideia: escalonamento adaptativo</h3>
+<p>Tarefas que demoram muito para executar podem ter seu período primo <strong>aumentado dinamicamente</strong>, enquanto tarefas rápidas recebem primos menores. O resultado é um <em>auto-tuning</em> baseado em carga real.</p>
+</div>
+</section>
+
+<section>
+<h2>4. IPC Avançado: Mensagens Tipadas</h2>
+<p>O <code>SharedData</code> é ótimo para fluxos lineares, mas para comunicação genérica entre tarefas, use um <strong>barramento de mensagens</strong>:</p>
+<pre>
+#define MSG_QUEUE_SIZE 16
+
+typedef struct {
+    u8 sender;
+    u8 receiver;
+    u8 type;
+    u8 payload[8];
+} Message;
+
+typedef struct {
+    Message buf[MSG_QUEUE_SIZE];
+    u8 head;
+    u8 tail;
+    u8 count;
+} MessageQueue;
+
+MessageQueue MSG_BUS = {0};
+
+void msg_send(u8 from, u8 to, u8 type, u8 *data, u8 len) {
+    if (MSG_BUS.count &gt;= MSG_QUEUE_SIZE) return;
+    Message *m = &amp;MSG_BUS.buf[MSG_BUS.head];
+    m-&gt;sender = from;
+    m-&gt;receiver = to;
+    m-&gt;type = type;
+    for (u8 i = 0; i &lt; len &amp;&amp; i &lt; 8; i++) m-&gt;payload[i] = data[i];
+    MSG_BUS.head = (MSG_BUS.head + 1) % MSG_QUEUE_SIZE;
+    MSG_BUS.count++;
+}
+
+bool msg_receive(u8 who, Message *out) {
+    for (u8 i = 0; i &lt; MSG_BUS.count; i++) {
+        u8 idx = (MSG_BUS.tail + i) % MSG_QUEUE_SIZE;
+        if (MSG_BUS.buf[idx].receiver == who) {
+            *out = MSG_BUS.buf[idx];
+            // remove compactando
+            MSG_BUS.tail = (MSG_BUS.tail + 1) % MSG_QUEUE_SIZE;
+            MSG_BUS.count--;
+            return true;
+        }
+    }
+    return false;
+}
+</pre>
+</section>
+
+<section>
+<h2>5. Adicionando Drivers Periféricos</h2>
+<div class="idea">
+<h3>🎛️ Driver de ADC (task0 real)</h3>
+<pre>
+void ADC_Init(void) {
+    RCC-&gt;APB2PCENR |= RCC_APB2Periph_ADC1;
+    ADC1-&gt;CTLR2 |= ADC_ADON;
+}
+
+void task0(void) {
+    ADC1-&gt;RSQR3 = 0;          // canal 0
+    ADC1-&gt;CTLR2 |= ADC_SWSTART;
+    while (!(ADC1-&gt;STATR &amp; ADC_EOC));
+    SHARED.sensor_raw = ADC1-&gt;RDATAR;
+}
+</pre>
+</div>
+
+<div class="idea">
+<h3>⚡ Driver de PWM (task2 real)</h3>
+<pre>
+void task2(void) {
+    u16 duty = SHARED.actuator_cmd ? 2048 : 0;
+    TIM2-&gt;CH1CVR = duty;  // 50% ou 0%
+}
+</pre>
+</div>
+
+<div class="idea">
+<h3>📡 Driver I2C (para sensores externos)</h3>
+<pre>
+void task0(void) {
+    u8 buf[2];
+    I2C_ReadReg(0x68, 0x3B, buf, 2);  // ex: MPU6050
+    SHARED.sensor_raw = (buf[0] &lt;&lt; 8) | buf[1];
+}
+</pre>
+</div>
+</section>
+
+<section>
+<h2>6. Portando para outros MCUs</h2>
+<table style="width:100%;border-collapse:collapse">
+<tr><th style="padding:.7rem;border:1px solid var(--border);background:var(--code)">MCU</th><th style="padding:.7rem;border:1px solid var(--border);background:var(--code)">Mudanças necessárias</th></tr>
+<tr><td style="padding:.7rem;border:1px solid var(--border)">STM32F103 (ARM Cortex-M3)</td><td style="padding:.7rem;border:1px solid var(--border)">Trocar toolchain para <code>arm-none-eabi-gcc</code>, adaptar startup e drivers</td></tr>
+<tr><td style="padding:.7rem;border:1px solid var(--border)">ESP32-C3 (RISC-V)</td><td style="padding:.7rem;border:1px solid var(--border)">Usar ESP-IDF, kernel roda como task do FreeRTOS ou bare-metal</td></tr>
+<tr><td style="padding:.7rem;border:1px solid var(--border)">CH32V003 (2KB RAM)</td><td style="padding:.7rem;border:1px solid var(--border)">Reduzir <code>MAX_PROCESSES</code> para 64, remover debug_log</td></tr>
+<tr><td style="padding:.7rem;border:1px solid var(--border)">Arduino AVR</td><td style="padding:.7rem;border:1px solid var(--border)">Ajustar tipos (<code>u32</code> → <code>uint32_t</code>), kernel cabe no Uno</td></tr>
+<tr><td style="padding:.7rem;border:1px solid var(--border)">Linux user-space</td><td style="padding:.7rem;border:1px solid var(--border)">Adicionar <code>usleep()</code> no loop para simular tick rate</td></tr>
+</table>
+</section>
+
+<section>
+<h2>7. Roadmap Sugerido</h2>
+<ul class="roadmap">
+<li><span class="badge b-easy">FÁCIL</span> <div><strong>v1.1</strong> — Adicionar <code>debug_log</code> circular com timestamp</div></li>
+<li><span class="badge b-easy">FÁCIL</span> <div><strong>v1.2</strong> — Driver UART para log serial</div></li>
+<li><span class="badge b-med">MÉDIO</span> <div><strong>v1.3</strong> — Fila de mensagens tipadas (ver seção 4)</div></li>
+<li><span class="badge b-med">MÉDIO</span> <div><strong>v1.4</strong> — Watchdog de tarefas (detecta tarefas travadas)</div></li>
+<li><span class="badge b-med">MÉDIO</span> <div><strong>v1.5</strong> — Sistema de eventos com callbacks registrados</div></li>
+<li><span class="badge b-hard">AVANÇADO</span> <div><strong>v2.0</strong> — Scheduler híbrido (cooperativo + interrupções de alta prioridade)</div></li>
+<li><span class="badge b-hard">AVANÇADO</span> <div><strong>v2.1</strong> — Suporte multi-core (CH32V307 tem 1 core, mas ESP32 tem 2)</div></li>
+<li><span class="badge b-hard">AVANÇADO</span> <div><strong>v3.0</strong> — Portar para FPGA RISC-V (soft-core VexRiscv)</div></li>
+</ul>
+</section>
+
+<section>
+<h2>8. Como Contribuir com o Projeto</h2>
+<ol style="margin-left:1.5rem">
+<li><strong>Fork</strong> o repositório no GitHub</li>
+<li>Crie uma branch: <code>git checkout -b feature/nova-task</code></li>
+<li>Implemente seguindo as 3 Regras de Ouro (seção 1)</li>
+<li>Teste em hardware real (simuladores não capturam timing)</li>
+<li>Documente em <code>docs/</code> se for uma feature nova</li>
+<li>Abra um <strong>Pull Request</strong> descrevendo o impacto em RAM/Flash</li>
+</ol>
+
+<div class="idea">
+<h3>🎓 Contribuições acadêmicas bem-vindas</h3>
+<p>Se você é pesquisador ou estudante, o ELOIDA OS é um excelente objeto de estudo para:</p>
+<ul style="margin-left:1.5rem;margin-top:.5rem">
+<li>Análise de jitter em schedulers baseados em primos</li>
+<li>Comparação com FreeRTOS, Zephyr, RIOT-OS</li>
+<li>Verificação formal de propriedades de coprimalidade</li>
+<li>Benchmarks em diferentes arquiteturas RISC-V</li>
+</ul>
+</div>
+</section>
+</div>
+</body>
+</html>
