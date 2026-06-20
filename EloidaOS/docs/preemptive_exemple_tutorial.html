@@ -71,7 +71,7 @@
 <span class="text-blue-400">void</span> <span class="text-yellow-400">EXTI0_IRQHandler</span>(<span class="text-blue-400">void</span>) __attribute__((interrupt(<span class="text-green-400">"WCH-Interrupt-fast"</span>)));
 <span class="text-blue-400">void</span> <span class="text-yellow-400">EXTI0_IRQHandler</span>(<span class="text-blue-400">void</span>) {
     <span class="text-purple-400">if</span> (EXTI_GetITStatus(EXTI_Line0) != RESET) {
-        <span class="text-emerald-400">PROCESS[LONG_TASK_ID] = 0;</span> <span class="text-slate-500">// Zera a flag da tarefa longa na hora</span>
+        <span class="text-emerald-400">destroy(LONG_TASK_ID);</span> <span class="text-slate-500">// Zera a flag da tarefa longa na hora</span>
         SHARED.sensor_port_A++;    <span class="text-slate-500">// Registra o evento no IPC do usuário</span>
         EXTI_ClearITPendingBit(EXTI_Line0);
     }
@@ -81,7 +81,7 @@
 <span class="text-blue-400">void</span> <span class="text-yellow-400">EXTI1_IRQHandler</span>(<span class="text-blue-400">void</span>) __attribute__((interrupt(<span class="text-green-400">"WCH-Interrupt-fast"</span>)));
 <span class="text-blue-400">void</span> <span class="text-yellow-400">EXTI1_IRQHandler</span>(<span class="text-blue-400">void</span>) {
     <span class="text-purple-400">if</span> (EXTI_GetITStatus(EXTI_Line1) != RESET) {
-        <span class="text-emerald-400">PROCESS[LONG_TASK_ID] = 0;</span> <span class="text-slate-500">// Também aborta a tarefa se a segunda porta disparar</span>
+        <span class="text-emerald-400">destroy(LONG_TASK_ID);</span> <span class="text-slate-500">// Também aborta a tarefa se a segunda porta disparar</span>
         SHARED.sensor_port_B++;    <span class="text-slate-500">// Registra o evento no IPC do usuário</span>
         EXTI_ClearITPendingBit(EXTI_Line1);
     }
