@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ELOIDA OS - Guia de Preempção por Hardware</title>
+    <script src="https://jsdelivr.net"></script>
+    <style>
+        pre { background-color: #1e1e2e; color: #cdd6f4; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; font-family: monospace; }
+        code { color: #f38ba8; font-family: monospace; }
+        pre code { color: inherit; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans leading-relaxed">
+
+    <!-- Header -->
+    <header class="bg-slate-950 border-b border-slate-800 py-6 text-center">
+        <h1 class="text-3xl font-bold text-sky-400 tracking-wide">ELOIDA OS</h1>
+        <p class="text-slate-400 mt-2 text-sm sm:text-base">Guia Avançado: Implementando Preempção Real baseada em Interrupções de Hardware</p>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-4xl mx-auto px-4 py-8 space-y-12">
+        
+        <!-- Introdução -->
+        <section class="space-y-4">
+            <h2 class="text-2xl font-semibold text-sky-300 border-b border-slate-800 pb-2">O Conceito</h2>
+            <p>
+                Por padrão, o <strong>ELOIDA OS</strong> opera de forma cooperativa estrita, o que garante consumo zero de overhead na CPU RISC-V e previsibilidade matemática através de números primos. No entanto, se o seu projeto possui tarefas longas que não podem reter a CPU durante um evento crítico, você pode implementar a <strong>preempção forçada por hardware</strong>.
+            </p>
+            <p>
+                A estratégia consiste em usar os controladores de interrupção física do chip (como o PFIC/NVIC do CH32V307) para capturar um evento de pino externo e, de dentro da Rotina de Interrupção (ISR), <strong>zerar a flag de execução da tarefa corrente</strong>.
+            </p>
+        </section>
+
+        <!-- Arquitetura do Fluxo -->
+        <section class="bg-slate-950 p-6 rounded-lg border border-slate-800 space-y-3">
+            <h3 class="text-xl font-medium text-emerald-400">Como funciona o fluxo de interrupção:</h3>
+            <ol class="list-decimal list-inside space-y-2 text-slate-300 text-sm">
+                <li>Uma tarefa longa (ex: Processo 11) está executando seu laço interno na CPU.</li>
+                <li>Um sensor externo ou botão crítico gera uma transição de sinal em uma porta física (<code class="bg-slate-800 px-1 py-0.5 rounded">PA0</code> ou <code class="bg-slate-800 px-1 py-0.5 rounded">PA1</code>).</li>
+                <li>O hardware do RISC-V congela a CPU instantaneamente e desvia o fluxo para a função de interrupção (<code class="bg-slate-800 px-1 py-0.5 rounded">EXTI_IRQHandler</code>).</li>
+                <li>Dentro da interrupção, o código faz: <code class="bg-slate-800 px-1 py-0.5 rounded text-sky-300">PROCESS[11] = 0;</code></li>
+                <li>A interrupção termina e a CPU volta para a tarefa longa.</li>
+                <li>No próximo ponto de checagem (<code class="bg-slate-800 px-1 py-0.5 rounded text-amber-400">Checkpoint</code>) dentro da tarefa longa, ela percebe que sua flag foi zerada e encerra imediatamente, liberando o laço do OS.</li>
+            </ol>
+        </section>
+
+        <!-- Requisitos Práticos -->
+        <section class="space-y-4">
+            <h2 class="text-2xl font-semibold text-sky-300 border-b border-slate-800 pb-2">Requisitos de Implementação</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div class="bg-slate-950 p-4 rounded border border-slate-800">
+                    <h4 class="font-bold text-amber-400 mb-2">1. Volatilidade Obrigatória</h4>
+                    <p class="text-slate-400">
+                        O array de processos do kernel deve ser declarado com o modificador <code class="bg-slate-800 px-1 rounded">volatile u8 PROCESS[MAX_PROCESSES]</code>. Isso impede que o compilador GCC guarde a flag em registradores internos e a force a ler direto da RAM a cada ciclo.
+                    </p>
+                </div>
+                <div class="bg-slate-950 p-4 rounded border border-slate-800">
+                    <h4 class="font-bold text-amber-400 mb-2">2. Pontos de Checagem (Checkpoints)</h4>
+                    <p class="text-slate-400">
+                        Tarefas longas devem ser escritas de forma amigável à interrupção. O desenvolvedor deve espalhar checagens rápidas dentro de laços pesados para que a resposta da desistência seja o mais rápida possível.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Exemplo de Código -->
+        <section class="space-y-4">
+            <h2 class="text-2xl font-semibold text-sky-300 border-b border-slate-800 pb-2">Exemplo Prático em C</h2>
+            <p class="text-sm text-slate-400">
+                Abaixo está a estrutura padrão que o usuário deve adotar no código para integrar o ELOIDA OS com as interrupções de hardware:
+            </p>
+            
+            <pre><code><span class="text-slate-500">// 1. Definição da Macro de Checkpoint para o usuário</span>
+<span class="text-purple-400">#define</span> <span class="text-amber-400">ELOIDA_CHECKPOINT</span>(id) <span class="text-purple-400">if</span> (PROCESS[id] == <span class="text-teal-400">0</span>) <span class="text-purple-400">return</span>;
+
+<span class="text-slate-500">// 2. Interrupção de hardware monitorando uma porta física</span>
+<span class="text-blue-400">void</span> <span class="text-yellow-400">EXTI0_IRQHandler</span>(<span class="text-blue-400">void</span>) __attribute__((interrupt(<span class="text-green-400">"WCH-Interrupt-fast"</span>)));
+<span class="text-blue-400">void</span> <span class="text-yellow-400">EXTI0_IRQHandler</span>(<span class="text-blue-400">void</span>) {
+    <span class="text-purple-400">if</span> (EXTI_GetITStatus(EXTI_Line0) != RESET) {
+        
+        <span class="text-emerald-400">PROCESS[11] = 0;</span> <span class="text-slate-500">// Força a destruição imediata do fluxo do Processo 11</span>
+        
+        <span class="text-slate-500">// Trata o evento crítico da porta aqui com prioridade máxima...</span>
+        SHARED.sensor_port_A++; 
+        
+        EXTI_ClearITPendingBit(EXTI_Line0); <span class="text-slate-500">// Limpa o registrador de interrupção</span>
+    }
+}
+
+<span class="text-slate-500">// 3. Escrita da tarefa longa utilizando os checkpoints estratégicos</span>
+<span class="text-blue-400">void</span> <span class="text-yellow-400">task11</span>(<span class="text-blue-400">void</span>) {
+    <span class="text-purple-400">for</span> (u32 i = <span class="text-teal-400">0</span>; i < <span class="text-teal-400">10000</span>; i++) {
+        
+        <span class="text-amber-400">ELOIDA_CHECKPOINT</span>(<span class="text-teal-400">11</span>); <span class="text-slate-500">// Se a porta disparou a ISR, sai da função na hora!</span>
+        
+        <span class="text-slate-500">// Lógica pesada de processamento do usuário aqui...</span>
+        ProcessarDadosComplexos();
+        
+        <span class="text-amber-400">ELOIDA_CHECKPOINT</span>(<span class="text-teal-400">11</span>); <span class="text-slate-500">// Segundo ponto de checagem antes de reprocessar</span>
+    }
+}</code></pre>
+        </section>
+
+        <!-- Benefícios -->
+        <section class="space-y-4">
+            <h2 class="text-2xl font-semibold text-sky-300 border-b border-slate-800 pb-2">Vantagens dessa Abordagem</h2>
+            <ul class="list-disc list-inside space-y-2 text-slate-300">
+                <li><strong class="text-white">Simplicidade de Código:</strong> O kernel do ELOIDA OS permanece idêntico, leve e focado em recursos mínimos, sem necessidade de rotinas complexas de troca de contexto de pilha assembly.</li>
+                <li><strong class="text-white">Latência Mínima:</strong> O evento físico da porta é respondido de forma imediata dentro da ISR, enquanto o descarte da tarefa longa ocorre logo em seguida no nível do software de forma limpa.</li>
+                <li><strong class="text-white">Robustez Industrial:</strong> Evita o efeito cascata onde uma falha de comunicação de barramento ou um loop de processamento longo em uma tarefa paralise as leituras de segurança das portas principais.</li>
+            </ul>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-950 border-t border-slate-800 py-6 text-center text-xs text-slate-500">
+        <p>Documentação Técnica do ELOIDA OS - Desenvolvido para Hardware Restrito e Arquitetura RISC-V.</p>
+    </footer>
+
+</body>
+</html>
