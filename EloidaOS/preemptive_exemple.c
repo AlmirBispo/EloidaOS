@@ -52,8 +52,8 @@ void EXTI0_IRQHandler(void) {
         
         // A MÁGICA DA PREEMPÇÃO NO ELOIDA OS:
         // Força o fechamento da tarefa longa atual limpando sua flag de execução
-        PROCESS[LONG_TASK_ID] = 0; 
-        
+        // Chamada direta da função do seu Kernel para abortar a tarefa
+        destroy(LONG_TASK_ID); 
         // Trata o evento crítico imediatamente no espaço da interrupção
         SHARED.sensor_port_A++;
         SHARED.system_status |= 0x01; // Sinaliza que o sensor A interceptou o fluxo
@@ -68,8 +68,8 @@ void EXTI1_IRQHandler(void) {
     if (EXTI_GetITStatus(EXTI_Line1) != RESET) {
         
         // Interrompe a tarefa longa da mesma forma
-        PROCESS[LONG_TASK_ID] = 0; 
-        
+        // Chamada direta da função do seu Kernel para abortar a tarefa
+        destroy(LONG_TASK_ID);  
         // Trata o evento crítico do segundo sensor
         SHARED.sensor_port_B++;
         SHARED.system_status |= 0x02; // Sinaliza que o sensor B interceptou o fluxo
@@ -137,6 +137,13 @@ void run(u8 any_process) {
         // zera a flag. Se foi abortada pela ISR, já estará em zero.
         PROCESS[any_process] = 0; 
     }
+}
+// =================================================================================
+// Destroi a tarefa imediatamente 
+// =================================================================================
+void destroy(u8 any_process)
+{
+    if (any_process < MAX_PROCESSES) PROCESS[any_process] = 0;
 }
 
 // =================================================================================
