@@ -1,28 +1,27 @@
 /*
 ELOIDA OS - versao 15 tarefas, kernel enxuto
 Risc-V, CH32V307VCT6 @ 144 MHz
-Contadores de 32 bits, 4 faixas temporais (ns / ms / cs / s)
-
+Contadores de 32 bits baseados no CLOCK PRINCIPAL (144 MHz)
 ==========================================================================
  TABELA DE TEMPOS (estimativa com ~450 ns por varredura do main loop)
 ==========================================================================
   #   PRIMO          PERIODO APROX.        FAIXA     USO TIPICO
 --------------------------------------------------------------------------
-  0          2      ~0.9  us              ns        sensor rapido / debounce
-  1          5      ~2.25 us              ns        filtro IIR rapido
-  2         11      ~4.95 us              ns        controle PWM
-  3         23      ~10.4 us              ns        aquisicao ADC
-  4       7919      ~3.56 ms              ms        filtro FIR / media movel
-  5      36007      ~16.2 ms              ms        comunicacao UART/CAN
-  6     144013      ~64.8 ms              ms        refresh de display
-  7     720007      ~324  ms              ms        gestao de energia
-  8    1800001      ~810  ms              cs        watchdog feed
-  9    3600007      ~1.62 s               cs        heartbeat / LED status
- 10    7200011      ~3.24 s               cs        logging em flash
- 11   14400013      ~6.48 s               s         PID lento / supervisor
- 12   28800017      ~12.96 s              s         sincronizacao RTC
- 13   57600023      ~25.9 s               s         autoteste / calibracao
- 14  115200029      ~51.8 s               s         processamento pesado
+  0          2      ~13.9 ns              ns        sensor rapido / debounce
+  1          5      ~34.7 ns              ns        filtro IIR rapido
+  2         11      ~76.4 ns              ns        controle PWM
+  3         23      ~159.7 ns             ns        aquisicao ADC
+  4       7919      ~55.0 us              us        filtro FIR / media movel
+  5      36007      ~250.0 us             us        comunicacao UART/CAN
+  6     144013      ~1.00 ms              ms        refresh de display
+  7     720007      ~5.00 ms              ms        gestao de energia
+  8    1800001      ~12.5 ms              ms        watchdog feed
+  9    3600007      ~25.0 ms              ms        heartbeat / LED status
+ 10    7200011      ~50.0 ms              ms        logging em flash
+ 11   14400013      ~100.0 ms             ms        PID lento / supervisor
+ 12   28800017      ~200.0 ms             ms        sincronizacao RTC
+ 13   57600023      ~400.0 ms             ms        autoteste / calibracao
+ 14  115200029      ~800.0 ms             ms        processamento pesado
 ==========================================================================
 */
 
@@ -33,28 +32,27 @@ typedef unsigned int  u32;
 
 /* ------------------------------------------------------------------
  * TABELA DE PRIORIDADES PRIMAS - 15 TAREFAS
- * (comentario de tempo ao lado de cada primo)
+ * (comentario de tempo ao lado de cada primo, base 144 MHz)
  * ------------------------------------------------------------------ */
 const u32 PRIME_NUMS[MAX_TASKS] = {
     /* FAIXA ns ------------------------------------------------- */
-          2,          /* task0  -> ~0.9  us  | maxima prioridade    */
-          5,          /* task1  -> ~2.25 us                        */
-         11,          /* task2  -> ~4.95 us                        */
-         23,          /* task3  -> ~10.4 us                        */
+          2,          /* task0  -> ~13.9 ns  | maxima prioridade  */
+          5,          /* task1  -> ~34.7 ns                       */
+         11,          /* task2  -> ~76.4 ns                       */
+         23,          /* task3  -> ~159.7 ns                      */
+    /* FAIXA us ------------------------------------------------- */
+       7919,          /* task4  -> ~55.0 us                       */
+      36007,          /* task5  -> ~250.0 us                      */
     /* FAIXA ms ------------------------------------------------- */
-       7919,          /* task4  -> ~3.56 ms                        */
-      36007,          /* task5  -> ~16.2 ms                        */
-     144013,          /* task6  -> ~64.8 ms                        */
-     720007,          /* task7  -> ~324  ms                        */
-    /* FAIXA cs ------------------------------------------------- */
-    1800001,          /* task8  -> ~810  ms                        */
-    3600007,          /* task9  -> ~1.62 s                         */
-    7200011,          /* task10 -> ~3.24 s                         */
-    /* FAIXA s  ------------------------------------------------- */
-   14400013,          /* task11 -> ~6.48 s                         */
-   28800017,          /* task12 -> ~12.96 s                        */
-   57600023,          /* task13 -> ~25.9 s                         */
-  115200029           /* task14 -> ~51.8 s   | menor prioridade     */
+     144013,          /* task6  -> ~1.00 ms                       */
+     720007,          /* task7  -> ~5.00 ms                       */
+    1800001,          /* task8  -> ~12.5 ms                       */
+    3600007,          /* task9  -> ~25.0 ms                       */
+    7200011,          /* task10 -> ~50.0 ms                       */
+   14400013,          /* task11 -> ~100.0 ms                      */
+   28800017,          /* task12 -> ~200.0 ms                      */
+   57600023,          /* task13 -> ~400.0 ms                      */
+  115200029           /* task14 -> ~800.0 ms  | menor prioridade  */
 };
 
 /* ------------------------------------------------------------------
@@ -81,112 +79,111 @@ SharedData SHARED = {0};
  * ================================================================== */
 
 /* ------------------------------------------------------------------
- * task0  -  primo 2  -  ~0.9 us  -  FAIXA ns
+ * task0  -  primo 2  -  ~13.9 ns  -  FAIXA ns
  * ------------------------------------------------------------------
- * Prioridade MAXIMA. Roda a cada ~2 varreduras.
+ * Prioridade MAXIMA. Roda a cada ~2 ciclos de clock.
  * Deve ser ULTRA-RAPIDA: apenas leitura e escrita de registrador.
  * Ideal para: leitura de ADC, debounce de botao, captura de encoder.
  * ------------------------------------------------------------------ */
 void task0(void) { SHARED.sensor_raw = 42; }
 
 /* ------------------------------------------------------------------
- * task1  -  primo 5  -  ~2.25 us  -  FAIXA ns
+ * task1  -  primo 5  -  ~34.7 ns  -  FAIXA ns
  * ------------------------------------------------------------------
  * Alta prioridade. Filtro simples (media, IIR de 1a ordem).
- * Cuidado: ainda esta na faixa de microssegundos.
+ * Cuidado: ainda esta na faixa de nanossegundos.
  * ------------------------------------------------------------------ */
 void task1(void) { SHARED.sensor_filtered = (SHARED.sensor_raw * 3) / 2; }
 
 /* ------------------------------------------------------------------
- * task2  -  primo 11  -  ~4.95 us  -  FAIXA ns
+ * task2  -  primo 11  -  ~76.4 ns  -  FAIXA ns
  * ------------------------------------------------------------------
  * Controle de atuador (PWM, rele). Decide com base no filtrado.
  * ------------------------------------------------------------------ */
 void task2(void) { SHARED.actuator_cmd = (SHARED.sensor_filtered > 60) ? 1 : 0; }
 
 /* ------------------------------------------------------------------
- * task3  -  primo 23  -  ~10.4 us  -  FAIXA ns
+ * task3  -  primo 23  -  ~159.7 ns  -  FAIXA ns
  * ------------------------------------------------------------------
- * Ultima task da faixa ns. Ainda deve ser curta (< ~5 us de CPU).
+ * Ultima task da faixa ns. Ainda deve ser curta (< ~50 ns de CPU).
  * ------------------------------------------------------------------ */
 void task3(void) { SHARED.system_status |= 0x01; }
 
 /* ------------------------------------------------------------------
- * task4  -  primo 7919  -  ~3.56 ms  -  FAIXA ms
+ * task4  -  primo 7919  -  ~55.0 us  -  FAIXA us
  * ------------------------------------------------------------------
- * Inicio da faixa de milissegundos. Tem ~3.5 ms entre execucoes.
+ * Inicio da faixa de microssegundos. Tem ~55 us entre execucoes.
  * Ideal para: filtro FIR, media movel, controle de motor.
  * ------------------------------------------------------------------ */
 void task4(void) { SHARED.system_status |= 0x02; }
 
 /* ------------------------------------------------------------------
- * task5  -  primo 36007  -  ~16.2 ms  -  FAIXA ms
+ * task5  -  primo 36007  -  ~250.0 us  -  FAIXA us
  * ------------------------------------------------------------------
- * ~16 ms = ~60 Hz. Sincronizado com frame rate tipico.
- * Ideal para: comunicacao UART/CAN, parsing de protocolo.
+ * ~250 us. Comunicacao UART/CAN, parsing de protocolo.
  * ------------------------------------------------------------------ */
 void task5(void) { /* logica customizada */ }
 
 /* ------------------------------------------------------------------
- * task6  -  primo 144013  -  ~64.8 ms  -  FAIXA ms
+ * task6  -  primo 144013  -  ~1.00 ms  -  FAIXA ms
  * ------------------------------------------------------------------
- * ~65 ms = ~15 Hz. Refresh de display, atualizacao de UI.
+ * ~1 ms = 1 kHz. Refresh de display, atualizacao de UI.
  * ------------------------------------------------------------------ */
 void task6(void) { /* logica customizada */ }
 
 /* ------------------------------------------------------------------
- * task7  -  primo 720007  -  ~324 ms  -  FAIXA ms
+ * task7  -  primo 720007  -  ~5.00 ms  -  FAIXA ms
  * ------------------------------------------------------------------
- * Ultima task da faixa ms. Gestao de energia, modos de operacao.
+ * ~5 ms = 200 Hz. Gestao de energia, modos de operacao.
  * ------------------------------------------------------------------ */
 void task7(void) { /* logica customizada */ }
 
 /* ------------------------------------------------------------------
- * task8  -  primo 1800001  -  ~810 ms  -  FAIXA cs
+ * task8  -  primo 1800001  -  ~12.5 ms  -  FAIXA ms
  * ------------------------------------------------------------------
- * ~0.8 s. Watchdog feed, verificacao de sanidade do sistema.
+ * ~12.5 ms = 80 Hz. Watchdog feed, verificacao de sanidade.
  * ------------------------------------------------------------------ */
 void task8(void) { /* logica customizada */ }
 
 /* ------------------------------------------------------------------
- * task9  -  primo 3600007  -  ~1.62 s  -  FAIXA cs
+ * task9  -  primo 3600007  -  ~25.0 ms  -  FAIXA ms
  * ------------------------------------------------------------------
- * ~1.6 s. Heartbeat, pisca LED de status.
+ * ~25 ms = 40 Hz. Heartbeat, pisca LED de status.
  * ------------------------------------------------------------------ */
 void task9(void) { /* logica customizada */ }
 
 /* ------------------------------------------------------------------
- * task10  -  primo 7200011  -  ~3.24 s  -  FAIXA cs
+ * task10  -  primo 7200011  -  ~50.0 ms  -  FAIXA ms
  * ------------------------------------------------------------------
- * ~3.2 s. Logging em flash, persistencia de dados.
+ * ~50 ms = 20 Hz. Logging em flash, persistencia de dados.
  * ------------------------------------------------------------------ */
 void task10(void) { /* logica customizada */ }
 
 /* ------------------------------------------------------------------
- * task11  -  primo 14400013  -  ~6.48 s  -  FAIXA s
+ * task11  -  primo 14400013  -  ~100.0 ms  -  FAIXA ms
  * ------------------------------------------------------------------
- * ~6.5 s. PID lento, supervisor de estados, maquina de estados.
+ * ~100 ms = 10 Hz. PID lento, supervisor de estados.
  * ------------------------------------------------------------------ */
 void task11(void) { /* logica customizada */ }
 
 /* ------------------------------------------------------------------
- * task12  -  primo 28800017  -  ~12.96 s  -  FAIXA s
+ * task12  -  primo 28800017  -  ~200.0 ms  -  FAIXA ms
  * ------------------------------------------------------------------
- * ~13 s. Sincronizacao com RTC, ajuste de clock.
+ * ~200 ms = 5 Hz. Sincronizacao com RTC, ajuste de clock.
  * ------------------------------------------------------------------ */
 void task12(void) { /* logica customizada */ }
 
 /* ------------------------------------------------------------------
- * task13  -  primo 57600023  -  ~25.9 s  -  FAIXA s
+ * task13  -  primo 57600023  -  ~400.0 ms  -  FAIXA ms
  * ------------------------------------------------------------------
- * ~26 s. Autoteste, calibracao de sensores, diagnostico.
+ * ~400 ms = 2.5 Hz. Autoteste, calibracao de sensores.
  * ------------------------------------------------------------------ */
 void task13(void) { /* logica customizada */ }
 
 /* ------------------------------------------------------------------
- * task14  -  primo 115200029  -  ~51.8 s  -  FAIXA s
+ * task14  -  primo 115200029  -  ~800.0 ms  -  FAIXA ms
  * ------------------------------------------------------------------
- * Prioridade MINIMA. ~52 s entre execucoes.
+ * Prioridade MINIMA. ~800 ms entre execucoes.
  * Tempo de sobra para: processamento pesado, criptografia,
  * compactacao de logs, atualizacao de firmware, etc.
  * ------------------------------------------------------------------ */

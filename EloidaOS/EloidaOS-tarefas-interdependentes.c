@@ -1,7 +1,7 @@
 /*
 ELOIDA OS - Exemplo BMS com interdependencia e MMC por primos
 Risc-V, CH32V307VCT6 @ 144 MHz
-RTC 1 Hz como base de tempo
+CLOCK PRINCIPAL (144 MHz) como base de tempo
 Cada task retorna seu proprio primo (ou 0 em falha)
 MMC soma os retornos -> numero unico
 Tabela de desvio mapeia soma -> task a executar
@@ -13,21 +13,26 @@ typedef unsigned int  u32;
 #define MAX_TASKS    15
 
 /* ==================================================================
- * 1. TABELA DE PRIMOS - periodo em segundos RTC
+ * 1. TABELA DE PRIMOS - periodo em ciclos de clock (144 MHz)
+ * ==================================================================
+ * Primos escolhidos para dar periodos uteis em 144 MHz:
+ *   - Primos pequenos (2..47)  -> dezenas a centenas de ns
+ *   - Primos medios            -> microssegundos
+ *   - Primos grandes           -> milissegundos
  * ================================================================== */
 const u32 PRIME_NUMS[MAX_TASKS] = {
-     2,  3,  5,  7, 11,       /* tasks 0..4  - criticas   */
-    13, 17, 19, 23, 29,       /* tasks 5..9  - medias    */
-    31, 37, 41, 43, 47        /* tasks 10..14 - lentas   */
+     2,  3,  5,  7, 11,       /* tasks 0..4  - criticas   (ns)      */
+    13, 17, 19, 23, 29,       /* tasks 5..9  - medias    (ns/us)    */
+    31, 37, 41, 43, 47        /* tasks 10..14 - lentas   (us)       */
 };
 
 /* ==================================================================
  * 2. ESTADO DAS TASKS
  * ================================================================== */
 u8  READY[MAX_TASKS]  = {0};   /* flag: contador estourou        */
-u32 COUNTS[MAX_TASKS] = {0};   /* contador de segundos RTC        */
-u8  OK[MAX_TASKS]     = {0};   /* ultimo retorno (primo ou 0)     */
-u8  DONE[MAX_TASKS]   = {0};   /* ja executou ao menos 1x         */
+u32 COUNTS[MAX_TASKS] = {0};   /* contador de ciclos de clock    */
+u8  OK[MAX_TASKS]     = {0};   /* ultimo retorno (primo ou 0)    */
+u8  DONE[MAX_TASKS]   = {0};   /* ja executou ao menos 1x        */
 
 /* ==================================================================
  * 3. IPC - dados compartilhados entre tasks
@@ -227,9 +232,12 @@ u8 DESVIO(u32 soma)
 }
 
 /* ==================================================================
- * 8. ISR DO RTC - 1 Hz
+ * 8. ISR DO CLOCK - chamada a cada ciclo de 144 MHz (ou via SysTick)
+ * ==================================================================
+ * NOTA: em 144 MHz, um contador de 32 bits estoura em ~29.8 s.
+ * Para periodos maiores, use prescaler ou contador de 64 bits.
  * ================================================================== */
-void RTC_IRQHandler(void)
+void SysTick_Handler(void)
 {
     u8 i;
     for (i = 0; i < MAX_TASKS; i++) {
