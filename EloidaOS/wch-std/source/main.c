@@ -1336,8 +1336,8 @@ int main(void)
     Delay_Ms(500);
 
     printf("\r\n============================================\r\n");
-    printf("                  3AE System                  \r\n");
-    printf("ELOIDA OS - Base Padrao (rede robusta)\r\n");
+    printf("                  EloidaOS System                  \r\n");
+    printf("ELOIDA OS - Standard Firmware\r\n");
     printf("Clock: %d MHz\r\n", SystemCoreClock / 1000000);
     printf("========== by ABSF-TECH,2026 ================\r\n");
 
