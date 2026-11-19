@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EloidaOS Base Firmware — CH32V307 / CH32V208</title>
+<style>
+  :root{
+    --accent:#F5A623;      /* amarelo/laranja da figura */
+    --accent-soft:#FFF6E0;
+    --bg:#FFFFFF;
+    --text:#2B2B2B;
+    --muted:#6B6B6B;
+    --code-bg:#F7F8FA;
+    --border:#ECECEC;
+  }
+  *{box-sizing:border-box;}
+  body{
+    font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--text);
+    line-height:1.65; margin:0; padding:0;
+  }
+  .container{max-width:920px;margin:0 auto;padding:40px 22px 60px;}
+  header{border-bottom:4px solid var(--accent);padding-bottom:18px;margin-bottom:28px;}
+  h1{color:#1E1E1E;margin:0 0 6px;font-size:1.9em;}
+  .subtitle{color:var(--muted);font-size:1.05em;}
+  h2{color:#1E1E1E;border-left:5px solid var(--accent);padding-left:14px;margin-top:38px;margin-bottom:16px;font-size:1.35em;}
+  h3{color:#3A3A3A;margin-top:24px;margin-bottom:8px;border-bottom:1px solid var(--border);padding-bottom:4px;font-size:1.1em;}
+  p{margin:10px 0;}
+  code,pre{font-family:Consolas,Monaco,"Courier New",monospace;background:var(--code-bg);border-radius:4px;}
+  code{padding:2px 6px;font-size:.9em;color:#C7254E;}
+  pre{padding:14px;overflow-x:auto;border:1px solid var(--border);font-size:.85em;line-height:1.5;}
+  table{width:100%;border-collapse:collapse;margin:18px 0;font-size:.95em;}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top;}
+  th{background:var(--accent-soft);font-weight:600;border-bottom:2px solid var(--accent);}
+  tr:nth-child(even) td{background:#FCFCFC;}
+  .note{background:var(--accent-soft);border-left:5px solid var(--accent);padding:14px 16px;margin:20px 0;border-radius:4px;}
+  .note strong{color:#8A5A00;}
+  ol,ul{margin:10px 0 10px 22px;}
+  li{margin:4px 0;}
+  .lang-switch{text-align:right;font-size:.9em;margin-bottom:8px;}
+  .lang-switch label{cursor:pointer;color:var(--accent);font-weight:700;text-decoration:underline;}
+  #toggle-lang{display:none;}
+  .section-en{display:none;}
+  #toggle-lang:checked ~ .container .section-en{display:block;}
+  #toggle-lang:checked ~ .container .section-pt{display:none;}
+  .footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--border);font-size:.8em;color:#999;text-align:center;}
+  @media print{
+    .lang-switch{display:none;}
+    body{font-size:11pt;}
+    h2{page-break-after:avoid;}
+    table,pre{page-break-inside:avoid;}
+  }
+</style>
+</head>
+<body>
+
+<input type="checkbox" id="toggle-lang">
+<div class="container">
+
+  <div class="lang-switch">
+    <label for="toggle-lang">PT / EN — Alternar idioma</label>
+  </div>
+
+  <!-- ===================== PORTUGUÊS ===================== -->
+  <div class="section-pt">
+    <header>
+      <h1>Firmware Base EloidaOS</h1>
+      <div class="subtitle">Documentação de Referência — CH32V307 (portável para CH32V208)</div>
+      <div class="subtitle">Versão V7.0.0 · Autor: Almir Bispo · 2026</div>
+    </header>
+
+    <div class="note">
+      <strong>Nota de compatibilidade (CH32V208):</strong>
+      Este firmware foi escrito para o <strong>CH32V307</strong>, que possui PHY Ethernet 10M integrado
+      (sem PHY externo). As chamadas de API de rede (<code>ETH_LibInit</code>,
+      <code>WCHNET_DHCPStart</code>, <code>WCHNET_SocketSend</code>, etc.) são
+      <strong>compatíveis</strong> com o <strong>CH32V208</strong>, pois ambos usam a mesma
+      <code>netlib</code> distribuída com o MounRiver Studio e também possuem PHY 10M interno.
+      Para portar, basta ajustar o <em>ambiente de compilação</em>: criar um projeto CH32V208 na IDE,
+      substituir o <code>eth_driver.c</code>, o startup e o header <code>ch32v30x.h</code> pela versão
+      <code>ch32v20x</code>, e revisar a configuração de clock. A lógica do <code>main.c</code>
+      (kernel cooperativo, provisionamento, parsing de strings, SPI Flash, RTC, UART4) é reaproveitável.
+    </div>
+
+    <h2>1. Visão geral</h2>
+    <p>
+      O EloidaOS Base Firmware é um kernel cooperativo voltado para conectividade Ethernet robusta
+      (DHCP, DNS, cliente HTTP) e armazenamento em Flash SPI externa (W25Qxx). Inclui sistema de
+      provisionamento, ponte UART4 para o módulo WiFi HLK-RM08K e gerenciamento de RTC. A lógica de
+      negócio é intencionalmente deixada em branco nas tarefas, servindo de base limpa para a aplicação.
+    </p>
+
+    <h2>2. Definições globais e tipos</h2>
+    <h3>2.1 Provisionamento (Flash SPI)</h3>
+    <table>
+      <tr><th>Macro</th><th>Valor</th><th>Descrição</th></tr>
+      <tr><td><code>FLASH_PROV_BASE</code></td><td>0x001000</td><td>Endereço base na Flash externa.</td></tr>
+      <tr><td><code>FLASH_PROV_FLAG_ADDR</code></td><td>0x001000</td><td>Endereço do byte mágico.</td></tr>
+      <tr><td><code>FLAG_PROV_MAGIC</code></td><td>0xA5</td><td>Marcador de provisionamento válido.</td></tr>
+      <tr><td><code>FLASH_PROV_BIT0_ADDR</code> … <code>BIT4_ADDR</code></td><td>0x001010 … 0x001050</td><td>Endereços dos 5 bits de configuração.</td></tr>
+      <tr><td><code>FLASH_PROV_SETOR</code></td><td>1</td><td>Setor (4 KB) usado para provisionamento.</td></tr>
+    </table>
+
+    <h3>2.2 Kernel e rede</h3>
+    <table>
+      <tr><th>Macro</th><th>Valor</th><th>Descrição</th></tr>
+      <tr><td><code>MAX_PROCESSES</code></td><td>255</td><td>Máximo de processos cooperativos.</td></tr>
+      <tr><td><code>MAX_TASKS</code></td><td>15</td><td>Slots de tarefas no escalonador.</td></tr>
+      <tr><td><code>HTTP_PORT</code></td><td>4550</td><td>Porta TCP de destino HTTP.</td></tr>
+      <tr><td><code>HTTP_RECV_BUF_SIZE</code></td><td>2048</td><td>Tamanho do buffer de recepção HTTP.</td></tr>
+      <tr><td><code>MAX_HTTP_REQUEST_SIZE</code></td><td>800</td><td>Tamanho máximo de requisição HTTP.</td></tr>
+      <tr><td><code>DHCP_HOSTNAME</code></td><td>"ELOIDA_DEVICE"</td><td>Hostname enviado ao DHCP.</td></tr>
+      <tr><td><code>HTTP_ENDPOINT</code></td><td>"/cgi-bin/executa.exe/default"</td><td>Caminho do POST HTTP.</td></tr>
+      <tr><td><code>RECONNECT_TIMEOUT</code></td><td>5000 ms</td><td>Backoff de reconexão.</td></tr>
+      <tr><td><code>MAX_RETRY_ATTEMPTS</code></td><td>5</td><td>Tentativas antes de reiniciar o ciclo.</td></tr>
+    </table>
+
+    <h3>2.3 UART4 / WiFi</h3>
+    <table>
+      <tr><th>Macro</th><th>Valor</th><th>Descrição</th></tr>
+      <tr><td><code>DEFAULT_TIMEOUT_CYCLES</code></td><td>200000</td><td>Contador de timeout no polling da UART4 (sem tick do OS).</td></tr>
+    </table>
+
+    <h3>2.4 Estruturas de dados</h3>
+<pre><code>typedef struct {
+    char bit0[2];
+    char bit1[2];
+    char bit2[2];
+    char bit3[2];
+    char bit4[2];
+} ProvisaoCtx;               /* contexto de provisionamento */
+
+typedef struct {
+    u8 ip[4];
+    u8 resolved;
+    u8 in_progress;
+    u8 retry_count;
+} DnsContext;                /* estado da resolução DNS */
+
+typedef struct {
+    vu8  hour, min, sec;
+    vu16 w_year;
+    vu8  w_month, w_date, week;
+} _calendar_obj;             /* calendário RTC */
+
+typedef void (*TaskFunc)(void);</code></pre>
+
+    <h2>3. Referência de funções (por módulo)</h2>
+
+    <h3>3.1 UART4 — HLK-RM08K</h3>
+    <table>
+      <tr><th>Função</th><th>Descrição</th></tr>
+      <tr><td><code>uart_wifi_data_init()</code></td><td>Configura GPIOC10/11 e UART4 a 115200 8N1 para o módulo WiFi.</td></tr>
+      <tr><td><code>UART4_NVIC_Config()</code></td><td>Habilita interrupção UART4 (prioridade 3/0).</td></tr>
+      <tr><td><code>UART4_IRQHandler()</code></td><td>ISR: lê RXNE e limpa o pendente (o modo principal é polling).</td></tr>
+      <tr><td><code>print_wifi_data(char *Text)</code></td><td>Envia string byte a byte via UART4 com <code>Delay_Us(100)</code> entre bytes.</td></tr>
+      <tr><td><code>fragmentar(char *input_buffer, u32 tam_buffer)</code></td><td>Divide o buffer em blocos de 250 bytes com <code>Delay_Ms(5)</code> entre blocos.</td></tr>
+      <tr><td><code>UART4_Receive_Polling_NoTick(char *dest, int max)</code></td><td>Recepção por polling com timeout em ciclos (não depende do tick do OS).</td></tr>
+      <tr><td><code>Request_Wifi(char *DataRequest)</code></td><td>Fragmenta, envia e aguarda resposta em <code>SERVER_RESPONSE</code>; retorna o buffer.</td></tr>
+      <tr><td><code>get_hlk_rssi(char *rssi_buffer)</code></td><td>Entra em modo AT (<code>+++</code>), consulta <code>AT+RSSI?</code>, retorna ao modo dados (<code>ATO</code>). Retorna 1 se encontrou RSSI.</td></tr>
+    </table>
+
+    <h3>3.2 RTC e calendário</h3>
+    <table>
+      <tr><th>Função</th><th>Descrição</th></tr>
+      <tr><td><code>RTC_NVIC_Config()</code></td><td>Habilita interrupção RTC (prioridade 0/0).</td></tr>
+      <tr><td><code>RTC_IRQHandler()</code></td><td>ISR de segundo: chama <code>RTC_Get()</code> e limpa o pendente.</td></tr>
+      <tr><td><code>RTC_Init()</code></td><td>Liga LSE, configura prescaler 32767, define hora padrão (2026-07-14 10:00:00) se o backup for inválido.</td></tr>
+      <tr><td><code>Is_Leap_Year(u16 year)</code></td><td>Retorna 1 para ano bissexto (regra gregoriana completa).</td></tr>
+      <tr><td><code>RTC_Set(...)</code></td><td>Converte data/hora em contador Unix e grava no RTC.</td></tr>
+      <tr><td><code>RTC_Alarm_Set(...)</code></td><td>Configura o alarme do RTC a partir de data/hora.</td></tr>
+      <tr><td><code>RTC_Get()</code></td><td>Lê o contador e preenche a struct <code>calendar</code> (ano/mês/dia/hora/min/seg/semana).</td></tr>
+      <tr><td><code>RTC_Get_Week(...)</code></td><td>Calcula o dia da semana (0–6) para a data informada.</td></tr>
+      <tr><td><code>format_iso8601_utc(...)</code></td><td>Formata o <code>_calendar_obj</code> em ISO 8601 (<code>YYYY-MM-DDThh:mm:ss.000Z</code>).</td></tr>
+      <tr><td><code>timestamp_to_iso8601(...)</code></td><td>Converte um timestamp Unix diretamente em ISO 8601.</td></tr>
+    </table>
+
+    <h3>3.3 Rede — Ethernet / WCHNET</h3>
+    <table>
+      <tr><th>Função</th><th>Descrição</th></tr>
+      <tr><td><code>TIM2_Init()</code></td><td>Configura TIM2 como base de tempo da pilha WCHNET (tick de 1 ms).</td></tr>
+      <tr><td><code>mStopIfError(u8 iError)</code></td><td>Imprime código de erro WCHNET quando diferente de <code>WCHNET_ERR_SUCCESS</code>.</td></tr>
+      <tr><td><code>dns_resolve_callback(uint8_t *ip, void *arg)</code></td><td>Callback do DNS: copia o IP resolvido para <code>DnsCtx</code> e zera flags.</td></tr>
+      <tr><td><code>WCHNET_StartDNSResolution(const char *hostname)</code></td><td>Verifica PHY e DNS, chama <code>WCHNET_HostNameGetIp</code>; fallback para o IP fixo "192.168.101.3".</td></tr>
+      <tr><td><code>WCHNET_CreateTcpSocket()</code></td><td>Resolve DNS (se necessário), cria socket TCP e conecta em <code>HTTP_PORT</code>.</td></tr>
+      <tr><td><code>WCHNET_HandleSockInt(u8 socketid, u8 intstat)</code></td><td>Trata eventos de socket: concatena chunks em <code>SERVER_RESPONSE</code>, loga connect/disconnect/timeout.</td></tr>
+      <tr><td><code>WCHNET_HandleGlobalInt()</code></td><td>Trata eventos globais (PHY change, unreachable, conflito de IP, sockets).</td></tr>
+      <tr><td><code>WCHNET_DHCPCallBack(u8 status, void *arg)</code></td><td>Callback DHCP: atualiza IP/GW/Mask/DNS; <strong>não</strong> cria socket (a decisão fica com <code>task_rede</code>).</td></tr>
+      <tr><td><code>set_hostname(const char *name)</code></td><td>Define o hostname e invalida o cache DNS.</td></tr>
+      <tr><td><code>is_socket_connected(u8 socket_id)</code></td><td>Retorna 1 se o socket estiver em <code>SOCKET_STATUS_ESTABLISHED</code> (5).</td></tr>
+    </table>
+
+    <h3>3.4 Cliente HTTP robusto</h3>
+    <table>
+      <tr><th>Função</th><th>Descrição</th></tr>
+      <tr><td><code>Request_WEB(char *packet)</code></td><td>Envio TCP com backpressure (<code>WCHNET_QueryUnack</code>) e detecção de stall (600 × 5 ms ≈ 3 s). Não bloqueia a pilha.</td></tr>
+      <tr><td><code>HTTP_Transceive(char *packet)</code></td><td>Unifica o transporte: TCP quando <code>CONNECT_MODE == 0</code>, UART4 quando <code>CONNECT_MODE == 1</code>. Timeout de 3 s no TCP.</td></tr>
+      <tr><td><code>Request_Server(char *anydata)</code></td><td>Monta POST HTTP/1.1 válido (Host, Content-Type, Content-Length, Connection: close) e envia com backpressure.</td></tr>
+    </table>
+
+    <h3>3.5 Parsing de strings</h3>
+    <table>
+      <tr><th>Função</th><th>Descrição</th></tr>
+      <tr><td><code>GET_LIST_ITEM(...)</code></td><td>Extrai o item de índice <em>index</em> de uma lista delimitada por <code>start_delim</code>, <code>end_delim</code> e <code>separator</code>.</td></tr>
+      <tr><td><code>GET_VAR_AUTO(...)</code></td><td>Extrai o conteúdo entre <code>start_delim</code> e <code>end_delim</code> (ex.: <code>&lt;bit0&gt;…&lt;/bit0&gt;</code>).</td></tr>
+    </table>
+
+    <h3>3.6 SPI Flash — W25Qxx</h3>
+    <table>
+      <tr><th>Função</th><th>Descrição</th></tr>
+      <tr><td><code>SPI_Flash_Init()</code></td><td>Configura SPI1 (PA5/6/7) e CS em PA2 (modo 3, prescaler 4).</td></tr>
+      <tr><td><code>SPI1_ReadWriteByte(u8)</code></td><td>Troca um byte com timeout de 200 ciclos.</td></tr>
+      <tr><td><code>SPI_Flash_ReadSR()</code></td><td>Lê o registrador de status (comando 0x05).</td></tr>
+      <tr><td><code>SPI_Flash_Wait_Busy()</code></td><td>Aguarda o bit BUSY (0x01) do status.</td></tr>
+      <tr><td><code>SPI_FLASH_Write_Enable()</code></td><td>Envia WREN (0x06).</td></tr>
+      <tr><td><code>SPI_Flash_Erase_Sector(u32)</code></td><td>Apaga setor de 4 KB (0x20).</td></tr>
+      <tr><td><code>SPI_Flash_Read(...)</code></td><td>Leitura sequencial (0x03).</td></tr>
+      <tr><td><code>SPI_Flash_Write_Page(...)</code></td><td>Grava página (0x02).</td></tr>
+      <tr><td><code>SPI_Flash_Write(...)</code></td><td>Grava com verificação de conteúdo e erase condicional do setor.</td></tr>
+      <tr><td><code>SPI_Flash_Write_NoCheck(...)</code></td><td>Grava página a página sem verificação (usado no provisionamento).</td></tr>
+    </table>
+
+    <h3>3.7 Kernel cooperativo</h3>
+    <table>
+      <tr><th>Função</th><th>Descrição</th></tr>
+      <tr><td><code>process_create(u8 pointer)</code></td><td>Zera a flag do processo.</td></tr>
+      <tr><td><code>process(u32 Limit_count, u8 pointer)</code></td><td>Incrementa o contador; ao atingir <code>Limit_count</code>, marca o processo como pronto e zera o contador.</td></tr>
+      <tr><td><code>run(u8 any_process)</code></td><td>Executa <code>TASK_TABLE[any_process]()</code> se a flag estiver em 1.</td></tr>
+      <tr><td><code>destroy(u8 any_process)</code></td><td>Limpa a flag após execução.</td></tr>
+    </table>
+    <p>
+      A tabela <code>TASK_TABLE</code> mapeia 15 índices (<code>MAX_TASKS</code>) para as funções
+      <code>task0..task14</code>, com <code>task_rede</code> ocupando o slot 12. Os limites de execução
+      são números primos (<code>PRIME_NUMS</code>), gerando intervalos escalonados e distribuindo a carga.
+    </p>
+
+    <h3>3.8 Provisionamento</h3>
+    <table>
+      <tr><th>Função</th><th>Descrição</th></tr>
+      <tr><td><code>gravar_provisao()</code></td><td>Monta o setor (byte mágico + 5 bits), apaga o setor e grava; marca <code>FLAG_PROVISIONADO = 1</code>.</td></tr>
+      <tr><td><code>carregar_provisao()</code></td><td>Lê o byte mágico; se válido, lê os 5 bits e normaliza cada um para '0' ou '1'.</td></tr>
+      <tr><td><code>reset_provisao()</code></td><td>Apaga o setor de provisionamento e limpa o contexto.</td></tr>
+    </table>
+
+    <h3>3.9 Tarefas</h3>
+    <table>
+      <tr><th>Tarefa</th><th>Comportamento padrão</th></tr>
+      <tr><td><code>task0..task4, task6..task13</code></td><td>Vazias — placeholders para a lógica de negócio.</td></tr>
+      <tr><td><code>task5</code></td><td>Chama <code>RTC_Get()</code> para atualizar o calendário.</td></tr>
+      <tr><td><code>task_rede</code></td><td>Backoff de rede: aguarda DHCP, verifica conexão e, a cada 5 s, tenta <code>WCHNET_CreateTcpSocket</code> até <code>MAX_RETRY_ATTEMPTS</code>.</td></tr>
+      <tr><td><code>task14</code></td><td>Provisionamento via HTTP: envia token, parseia <code>&lt;device_token_id&gt;</code> e <code>&lt;bit0..4&gt;</code> e, se o token bater, chama <code>gravar_provisao()</code>. Limite de 10 tentativas (<code>PROV_POSSIBILITY</code>).</td></tr>
+    </table>
+
+    <h2>4. Fluxo do <code>main()</code></h2>
+    <ol>
+      <li>NVIC (grupo 2), <code>SystemCoreClockUpdate</code>, <code>Delay_Init</code>, printf em 115200, espera de 3 s.</li>
+      <li><code>TIM2_Init</code>, <code>SPI_Flash_Init</code>, banner e <code>carregar_provisao()</code>.</li>
+      <li>Verificação da versão da biblioteca WCHNET; leitura do MAC; <code>set_hostname</code> e <code>WCHNET_DHCPSetHostname</code>.</li>
+      <li><code>ETH_LibInit</code>, <code>WCHNET_DHCPStart</code> com o callback do firmware.</li>
+      <li><code>uart_wifi_data_init</code>, <code>RTC_Init</code>.</li>
+      <li>Loop principal:
+        <ul>
+          <li><code>WCHNET_MainTask()</code>;</li>
+          <li>para cada índice <em>i</em>: <code>process(PRIME_NUMS[i], i)</code> → <code>run(i)</code> → <code>destroy(i)</code>;</li>
+          <li><code>WCHNET_QueryGlobalInt</code> / <code>WCHNET_HandleGlobalInt</code>;</li>
+          <li><code>Delay_Us(10)</code>.</li>
+        </ul>
+      </li>
+    </ol>
+
+    <div class="footer">EloidaOS · Base Padrão · ABSF-TECH, 2026</div>
+  </div>
+
+  <!-- ===================== ENGLISH ===================== -->
+  <div class="section-en">
+    <header>
+      <h1>EloidaOS Base Firmware</h1>
+      <div class="subtitle">Reference Documentation — CH32V307 (portable to CH32V208)</div>
+      <div class="subtitle">Version V7.0.0 · Author: Almir Bispo · 2026</div>
+    </header>
+
+    <div class="note">
+      <strong>CH32V208 compatibility note:</strong>
+      This firmware targets the <strong>CH32V307</strong>, which has an integrated 10M Ethernet PHY
+      (no external PHY required). The network API calls (<code>ETH_LibInit</code>,
+      <code>WCHNET_DHCPStart</code>, <code>WCHNET_SocketSend</code>, etc.) are
+      <strong>compatible</strong> with the <strong>CH32V208</strong>, since both use the same
+      <code>netlib</code> shipped with MounRiver Studio and both have an internal 10M PHY.
+      Porting only requires adjusting the <em>build environment</em>: create a CH32V208 project in the
+      IDE, replace <code>eth_driver.c</code>, the startup file and <code>ch32v30x.h</code> with the
+      <code>ch32v20x</code> versions, and review the clock configuration. The <code>main.c</code> logic
+      (cooperative kernel, provisioning, string parsing, SPI Flash, RTC, UART4) is reusable as-is.
+    </div>
+
+    <h2>1. Overview</h2>
+    <p>
+      The EloidaOS Base Firmware is a cooperative kernel focused on robust Ethernet connectivity
+      (DHCP, DNS, HTTP client) and external SPI Flash storage (W25Qxx). It includes a provisioning
+      system, a UART4 bridge to the HLK-RM08K WiFi module, and RTC management. Business logic is
+      intentionally left empty inside the tasks, providing a clean foundation for applications.
+    </p>
+
+    <h2>2. Global definitions and types</h2>
+    <h3>2.1 Provisioning (SPI Flash)</h3>
+    <table>
+      <tr><th>Macro</th><th>Value</th><th>Description</th></tr>
+      <tr><td><code>FLASH_PROV_BASE</code></td><td>0x001000</td><td>Base address in external Flash.</td></tr>
+      <tr><td><code>FLASH_PROV_FLAG_ADDR</code></td><td>0x001000</td><td>Magic byte address.</td></tr>
+      <tr><td><code>FLAG_PROV_MAGIC</code></td><td>0xA5</td><td>Valid-provisioning marker.</td></tr>
+      <tr><td><code>FLASH_PROV_BIT0_ADDR</code> … <code>BIT4_ADDR</code></td><td>0x001010 … 0x001050</td><td>Addresses of the 5 configuration bits.</td></tr>
+      <tr><td><code>FLASH_PROV_SETOR</code></td><td>1</td><td>4 KB sector used for provisioning.</td></tr>
+    </table>
+
+    <h3>2.2 Kernel and network</h3>
+    <table>
+      <tr><th>Macro</th><th>Value</th><th>Description</th></tr>
+      <tr><td><code>MAX_PROCESSES</code></td><td>255</td><td>Maximum cooperative processes.</td></tr>
+      <tr><td><code>MAX_TASKS</code></td><td>15</td><td>Task slots in the scheduler.</td></tr>
+      <tr><td><code>HTTP_PORT</code></td><td>4550</td><td>Destination TCP port for HTTP.</td></tr>
+      <tr><td><code>HTTP_RECV_BUF_SIZE</code></td><td>2048</td><td>HTTP receive buffer size.</td></tr>
+      <tr><td><code>MAX_HTTP_REQUEST_SIZE</code></td><td>800</td><td>Maximum HTTP request size.</td></tr>
+      <tr><td><code>DHCP_HOSTNAME</code></td><td>"ELOIDA_DEVICE"</td><td>Hostname sent to DHCP.</td></tr>
+      <tr><td><code>HTTP_ENDPOINT</code></td><td>"/cgi-bin/executa.exe/default"</td><td>HTTP POST path.</td></tr>
+      <tr><td><code>RECONNECT_TIMEOUT</code></td><td>5000 ms</td><td>Reconnection backoff.</td></tr>
+      <tr><td><code>MAX_RETRY_ATTEMPTS</code></td><td>5</td><td>Attempts before restarting the cycle.</td></tr>
+    </table>
+
+    <h3>2.3 UART4 / WiFi</h3>
+    <table>
+      <tr><th>Macro</th><th>Value</th><th>Description</th></tr>
+      <tr><td><code>DEFAULT_TIMEOUT_CYCLES</code></td><td>200000</td><td>UART4 polling timeout counter (OS-tick independent).</td></tr>
+    </table>
+
+    <h3>2.4 Data structures</h3>
+<pre><code>typedef struct {
+    char bit0[2];
+    char bit1[2];
+    char bit2[2];
+    char bit3[2];
+    char bit4[2];
+} ProvisaoCtx;               /* provisioning context */
+
+typedef struct {
+    u8 ip[4];
+    u8 resolved;
+    u8 in_progress;
+    u8 retry_count;
+} DnsContext;                /* DNS resolution state */
+
+typedef struct {
+    vu8  hour, min, sec;
+    vu16 w_year;
+    vu8  w_month, w_date, week;
+} _calendar_obj;             /* RTC calendar */
+
+typedef void (*TaskFunc)(void);</code></pre>
+
+    <h2>3. Function reference (by module)</h2>
+
+    <h3>3.1 UART4 — HLK-RM08K</h3>
+    <table>
+      <tr><th>Function</th><th>Description</th></tr>
+      <tr><td><code>uart_wifi_data_init()</code></td><td>Configures GPIOC10/11 and UART4 at 115200 8N1 for the WiFi module.</td></tr>
+      <tr><td><code>UART4_NVIC_Config()</code></td><td>Enables the UART4 interrupt (priority 3/0).</td></tr>
+      <tr><td><code>UART4_IRQHandler()</code></td><td>ISR: reads RXNE and clears the pending flag (main path is polling).</td></tr>
+      <tr><td><code>print_wifi_data(char *Text)</code></td><td>Sends a string byte by byte over UART4 with <code>Delay_Us(100)</code> between bytes.</td></tr>
+      <tr><td><code>fragmentar(char *input_buffer, u32 tam_buffer)</code></td><td>Splits the buffer into 250-byte chunks with <code>Delay_Ms(5)</code> between chunks.</td></tr>
+      <tr><td><code>UART4_Receive_Polling_NoTick(char *dest, int max)</code></td><td>Polling receive with a cycle-based timeout (no OS-tick dependency).</td></tr>
+      <tr><td><code>Request_Wifi(char *DataRequest)</code></td><td>Fragments, sends, and waits for a response in <code>SERVER_RESPONSE</code>; returns the buffer.</td></tr>
+      <tr><td><code>get_hlk_rssi(char *rssi_buffer)</code></td><td>Enters AT mode (<code>+++</code>), queries <code>AT+RSSI?</code>, returns to data mode (<code>ATO</code>). Returns 1 if RSSI was found.</td></tr>
+    </table>
+
+    <h3>3.2 RTC and calendar</h3>
+    <table>
+      <tr><th>Function</th><th>Description</th></tr>
+      <tr><td><code>RTC_NVIC_Config()</code></td><td>Enables the RTC interrupt (priority 0/0).</td></tr>
+      <tr><td><code>RTC_IRQHandler()</code></td><td>Second ISR: calls <code>RTC_Get()</code> and clears the pending flag.</td></tr>
+      <tr><td><code>RTC_Init()</code></td><td>Starts LSE, sets prescaler 32767, and defaults the time (2026-07-14 10:00:00) when the backup domain is invalid.</td></tr>
+      <tr><td><code>Is_Leap_Year(u16 year)</code></td><td>Returns 1 for a leap year (full Gregorian rule).</td></tr>
+      <tr><td><code>RTC_Set(...)</code></td><td>Converts date/time to a Unix counter and writes it to the RTC.</td></tr>
+      <tr><td><code>RTC_Alarm_Set(...)</code></td><td>Sets the RTC alarm from date/time.</td></tr>
+      <tr><td><code>RTC_Get()</code></td><td>Reads the counter and fills the <code>calendar</code> struct (year/month/day/hour/min/sec/week).</td></tr>
+      <tr><td><code>RTC_Get_Week(...)</code></td><td>Computes the weekday (0–6) for the given date.</td></tr>
+      <tr><td><code>format_iso8601_utc(...)</code></td><td>Formats the <code>_calendar_obj</code> as ISO 8601 (<code>YYYY-MM-DDThh:mm:ss.000Z</code>).</td></tr>
+      <tr><td><code>timestamp_to_iso8601(...)</code></td><td>Converts a Unix timestamp directly to ISO 8601.</td></tr>
+    </table>
+
+    <h3>3.3 Network — Ethernet / WCHNET</h3>
+    <table>
+      <tr><th>Function</th><th>Description</th></tr>
+      <tr><td><code>TIM2_Init()</code></td><td>Configures TIM2 as the WCHNET time base (1 ms tick).</td></tr>
+      <tr><td><code>mStopIfError(u8 iError)</code></td><td>Prints the WCHNET error code when it differs from <code>WCHNET_ERR_SUCCESS</code>.</td></tr>
+      <tr><td><code>dns_resolve_callback(uint8_t *ip, void *arg)</code></td><td>DNS callback: copies the resolved IP into <code>DnsCtx</code> and clears flags.</td></tr>
+      <tr><td><code>WCHNET_StartDNSResolution(const char *hostname)</code></td><td>Checks PHY and DNS, calls <code>WCHNET_HostNameGetIp</code>; falls back to the fixed IP "192.168.101.3".</td></tr>
+      <tr><td><code>WCHNET_CreateTcpSocket()</code></td><td>Resolves DNS (if needed), creates a TCP socket, and connects to <code>HTTP_PORT</code>.</td></tr>
+      <tr><td><code>WCHNET_HandleSockInt(u8 socketid, u8 intstat)</code></td><td>Handles socket events: concatenates chunks into <code>SERVER_RESPONSE</code>, logs connect/disconnect/timeout.</td></tr>
+      <tr><td><code>WCHNET_HandleGlobalInt()</code></td><td>Handles global events (PHY change, unreachable, IP conflict, sockets).</td></tr>
+      <tr><td><code>WCHNET_DHCPCallBack(u8 status, void *arg)</code></td><td>DHCP callback: updates IP/GW/Mask/DNS; it does <strong>not</strong> create a socket (that decision belongs to <code>task_rede</code>).</td></tr>
+      <tr><td><code>set_hostname(const char *name)</code></td><td>Sets the hostname and invalidates the DNS cache.</td></tr>
+      <tr><td><code>is_socket_connected(u8 socket_id)</code></td><td>Returns 1 when the socket is in <code>SOCKET_STATUS_ESTABLISHED</code> (5).</td></tr>
+    </table>
+
+    <h3>3.4 Robust HTTP client</h3>
+    <table>
+      <tr><th>Function</th><th>Description</th></tr>
+      <tr><td><code>Request_WEB(char *packet)</code></td><td>TCP send with backpressure (<code>WCHNET_QueryUnack</code>) and stall detection (600 × 5 ms ≈ 3 s). Does not block the stack.</td></tr>
+      <tr><td><code>HTTP_Transceive(char *packet)</code></td><td>Unifies transport: TCP when <code>CONNECT_MODE == 0</code>, UART4 when <code>CONNECT_MODE == 1</code>. 3 s TCP timeout.</td></tr>
+      <tr><td><code>Request_Server(char *anydata)</code></td><td>Builds a valid HTTP/1.1 POST (Host, Content-Type, Content-Length, Connection: close) and sends it with backpressure.</td></tr>
+    </table>
+
+    <h3>3.5 String parsing</h3>
+    <table>
+      <tr><th>Function</th><th>Description</th></tr>
+      <tr><td><code>GET_LIST_ITEM(...)</code></td><td>Extracts the item at <em>index</em> from a list delimited by <code>start_delim</code>, <code>end_delim</code>, and <code>separator</code>.</td></tr>
+      <tr><td><code>GET_VAR_AUTO(...)</code></td><td>Extracts the content between <code>start_delim</code> and <code>end_delim</code> (e.g. <code>&lt;bit0&gt;…&lt;/bit0&gt;</code>).</td></tr>
+    </table>
+
+    <h3>3.6 SPI Flash — W25Qxx</h3>
+    <table>
+      <tr><th>Function</th><th>Description</th></tr>
+      <tr><td><code>SPI_Flash_Init()</code></td><td>Configures SPI1 (PA5/6/7) and CS on PA2 (mode 3, prescaler 4).</td></tr>
+      <tr><td><code>SPI1_ReadWriteByte(u8)</code></td><td>Exchanges one byte with a 200-cycle timeout.</td></tr>
+      <tr><td><code>SPI_Flash_ReadSR()</code></td><td>Reads the status register (command 0x05).</td></tr>
+      <tr><td><code>SPI_Flash_Wait_Busy()</code></td><td>Waits for the BUSY bit (0x01) in the status register.</td></tr>
+      <tr><td><code>SPI_FLASH_Write_Enable()</code></td><td>Sends WREN (0x06).</td></tr>
+      <tr><td><code>SPI_Flash_Erase_Sector(u32)</code></td><td>Erases a 4 KB sector (0x20).</td></tr>
+      <tr><td><code>SPI_Flash_Read(...)</code></td><td>Sequential read (0x03).</td></tr>
+      <tr><td><code>SPI_Flash_Write_Page(...)</code></td><td>Page program (0x02).</td></tr>
+      <tr><td><code>SPI_Flash_Write(...)</code></td><td>Writes with content check and conditional sector erase.</td></tr>
+      <tr><td><code>SPI_Flash_Write_NoCheck(...)</code></td><td>Page-by-page write without check (used by provisioning).</td></tr>
+    </table>
+
+    <h3>3.7 Cooperative kernel</h3>
+    <table>
+      <tr><th>Function</th><th>Description</th></tr>
+      <tr><td><code>process_create(u8 pointer)</code></td><td>Clears the process flag.</td></tr>
+      <tr><td><code>process(u32 Limit_count, u8 pointer)</code></td><td>Increments the counter; when <code>Limit_count</code> is reached, marks the process ready and resets the counter.</td></tr>
+      <tr><td><code>run(u8 any_process)</code></td><td>Executes <code>TASK_TABLE[any_process]()</code> when the flag is 1.</td></tr>
+      <tr><td><code>destroy(u8 any_process)</code></td><td>Clears the flag after execution.</td></tr>
+    </table>
+    <p>
+      <code>TASK_TABLE</code> maps 15 indices (<code>MAX_TASKS</code>) to <code>task0..task14</code>,
+      with <code>task_rede</code> occupying slot 12. Execution limits are prime numbers
+      (<code>PRIME_NUMS</code>), producing staggered intervals that spread the load.
+    </p>
+
+    <h3>3.8 Provisioning</h3>
+    <table>
+      <tr><th>Function</th><th>Description</th></tr>
+      <tr><td><code>gravar_provisao()</code></td><td>Builds the sector (magic byte + 5 bits), erases the sector, writes it, and sets <code>FLAG_PROVISIONADO = 1</code>.</td></tr>
+      <tr><td><code>carregar_provisao()</code></td><td>Reads the magic byte; if valid, reads the 5 bits and normalizes each to '0' or '1'.</td></tr>
+      <tr><td><code>reset_provisao()</code></td><td>Erases the provisioning sector and clears the context.</td></tr>
+    </table>
+
+    <h3>3.9 Tasks</h3>
+    <table>
+      <tr><th>Task</th><th>Default behavior</th></tr>
+      <tr><td><code>task0..task4, task6..task13</code></td><td>Empty — business-logic placeholders.</td></tr>
+      <tr><td><code>task5</code></td><td>Calls <code>RTC_Get()</code> to refresh the calendar.</td></tr>
+      <tr><td><code>task_rede</code></td><td>Network backoff: waits for DHCP, checks the connection, and every 5 s tries <code>WCHNET_CreateTcpSocket</code> up to <code>MAX_RETRY_ATTEMPTS</code>.</td></tr>
+      <tr><td><code>task14</code></td><td>HTTP provisioning: sends the token, parses <code>&lt;device_token_id&gt;</code> and <code>&lt;bit0..4&gt;</code>, and calls <code>gravar_provisao()</code> when the token matches. Capped at 10 attempts (<code>PROV_POSSIBILITY</code>).</td></tr>
+    </table>
+
+    <h2>4. <code>main()</code> flow</h2>
+    <ol>
+      <li>NVIC (group 2), <code>SystemCoreClockUpdate</code>, <code>Delay_Init</code>, printf at 115200, 3 s delay.</li>
+      <li><code>TIM2_Init</code>, <code>SPI_Flash_Init</code>, banner, and <code>carregar_provisao()</code>.</li>
+      <li>WCHNET library version check; MAC read; <code>set_hostname</code> and <code>WCHNET_DHCPSetHostname</code>.</li>
+      <li><code>ETH_LibInit</code>, <code>WCHNET_DHCPStart</code> with the firmware callback.</li>
+      <li><code>uart_wifi_data_init</code>, <code>RTC_Init</code>.</li>
+      <li>Main loop:
+        <ul>
+          <li><code>WCHNET_MainTask()</code>;</li>
+          <li>for each index <em>i</em>: <code>process(PRIME_NUMS[i], i)</code> → <code>run(i)</code> → <code>destroy(i)</code>;</li>
+          <li><code>WCHNET_QueryGlobalInt</code> / <code>WCHNET_HandleGlobalInt</code>;</li>
+          <li><code>Delay_Us(10)</code>.</li>
+        </ul>
+      </li>
+    </ol>
+
+    <div class="footer">EloidaOS · Base Standard · ABSF-TECH, 2026</div>
+  </div>
+
+</div>
+</body>
+</html>
