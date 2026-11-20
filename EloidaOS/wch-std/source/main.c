@@ -39,7 +39,7 @@
  * DEFINES — KERNEL ELOIDA OS
  * ============================================================ */
 #define MAX_PROCESSES 255
-#define MAX_TASKS     15
+#define MAX_TASKS     16
 
 /* ============================================================
  * DEFINES — REDE
@@ -52,7 +52,7 @@
 #define SOCKET_STATUS_CLOSED      0
 #define SOCKET_STATUS_ESTABLISHED 5
 #define HTTP_ENDPOINT         "/cgi-bin/executa.exe/default"
-
+u8 CONNECT_MODE = 0; // 0 = rj45 | 1 = wifi
 /* Backoff de reconexao (equivalente ao master) */
 #define RECONNECT_TIMEOUT     5000   /* ms */
 #define MAX_RETRY_ATTEMPTS    5
@@ -105,11 +105,11 @@ volatile u8 PROV_POSSIBILITY = 0;
 u8  PROCESS[MAX_PROCESSES] = {0};
 u32 COUNTS[MAX_PROCESSES]  = {0};
 
+
 u32 PRIME_NUMS[MAX_TASKS] = {
     2, 3, 7, 19, 41, 79, 199, 401,
-    2003, 4001, 8009, 20011, 40009, 80021, 200003
+    2003, 4001, 8009, 20011, 40009, 80021, 200003, 400009
 };
-
 /* ============================================================
  * VARIAVEIS GLOBAIS — REDE
  * ============================================================ */
@@ -123,7 +123,7 @@ u8 SocketId     = 0;
 u8 SocketRecvBuf[WCHNET_MAX_SOCKET_NUM][HTTP_RECV_BUF_SIZE];
 u8 HttpRecvBuffer[HTTP_RECV_BUF_SIZE];
 
-char Hostname[MAX_HOSTNAME_LEN] = "192.168.101.3";
+char Hostname[MAX_HOSTNAME_LEN] = "192.168.101.22";
 volatile char SERVER_RESPONSE[2048] = "";
 char TOKEN_CLIENT[50] = "c17d76b5-ce93-74aa-0d2032185c29";
 
@@ -214,24 +214,23 @@ void  SPI_Flash_Write_Page(u8 *pBuffer, u32 WriteAddr, u16 size);
 void  SPI_Flash_Write(u8 *pBuffer, u32 WriteAddr, u16 size);
 void  SPI_Flash_Write_NoCheck(u8 *pBuffer, u32 WriteAddr, u16 size);
 
-/* --- Tasks (ANTES da TASK_TABLE) --- */
-void  task0(void);
-void  task1(void);
-void  task2(void);
-void  task3(void);
-void  task4(void);
-void  task5(void);
-void  task6(void);
-void  task7(void);
-void  task8(void);
-void  task9(void);
-void  task10(void);
-void  task11(void);
-void  task_rede(void);          /* substitui task_reconnect */
-void  task12(void);
-void  task13(void);
-void  task14(void);
-
+/* --- Base: ~13 us/ciclo @ 144 MHz) --- */
+void  task0(void);      /* ~26 us    (~38,5 kHz)  | Divisor: 2      */
+void  task1(void);      /* ~39 us    (~25,6 kHz)  | Divisor: 3      */
+void  task2(void);      /* ~91 us    (~11,0 kHz)  | Divisor: 7      */
+void  task3(void);      /* ~247 us   (~4,05 kHz)  | Divisor: 19     */
+void  task4(void);      /* ~533 us   (~1,88 kHz)  | Divisor: 41     */
+void  task5(void);      /* ~1,03 ms  (~973 Hz)    | Divisor: 79     */
+void  task6(void);      /* ~2,59 ms  (~386 Hz)    | Divisor: 199    */
+void  task7(void);      /* ~5,21 ms  (~192 Hz)    | Divisor: 401    */
+void  task8(void);      /* ~26,0 ms  (~38,4 Hz)   | Divisor: 2003   */
+void  task9(void);      /* ~52,0 ms  (~19,2 Hz)   | Divisor: 4001   */
+void  task10(void);     /* ~104,1 ms (~9,6 Hz)    | Divisor: 8009   */
+void  task11(void);     /* ~260,1 ms (~3,84 Hz)   | Divisor: 20011  */
+void  task_rede(void);  /* ~520,1 ms (~1,92 Hz)   | Divisor: 40009  */
+void  task12(void);     /* ~1,04 s   (~0,96 Hz)   | Divisor: 80021  */
+void  task13(void);     /* ~2,60 s   (~0,38 Hz)   | Divisor: 200003 */
+void  task14(void);     /* ~5,20 s   (~0,19 Hz)   | Divisor: 400009 (MAX_TASKS = 16) */
 /* --- Kernel --- */
 void  process_create(u8 pointer);
 void  process(u32 Limit_count, u8 pointer);
@@ -668,9 +667,9 @@ u8 WCHNET_StartDNSResolution(const char *hostname)
 
     ret = WCHNET_HostNameGetIp(hostname, DnsCtx.ip, dns_resolve_callback, &DnsCtx);
     if (ret != WCHNET_ERR_SUCCESS) {
-        if (strcmp(hostname, "192.168.101.3") == 0) {
+        if (strcmp(hostname, "192.168.101.22") == 0) {
             DnsCtx.ip[0] = 192; DnsCtx.ip[1] = 168;
-            DnsCtx.ip[2] = 101; DnsCtx.ip[3] = 3;
+            DnsCtx.ip[2] = 101; DnsCtx.ip[3] = 22;
             DnsCtx.resolved    = 1;
             DnsCtx.in_progress = 0;
             return 1;
@@ -756,8 +755,16 @@ void WCHNET_HandleGlobalInt(void)
     if (intstat & GINT_STAT_IP_CONFLI) printf("IP Conflict\r\n");
     if (intstat & GINT_STAT_PHY_CHANGE) {
         u16 phyStatus = WCHNET_GetPHYStatus();
-        if (phyStatus & PHY_Linked_Status) printf("PHY Link Up\r\n");
-        else                                printf("PHY Link Down\r\n");
+        if (phyStatus & PHY_Linked_Status) 
+        {
+            printf("PHY Link Up\r\n");
+            CONNECT_MODE = 0; // 0 = rj45 | 1 = wifi
+        }
+        else                                
+        {
+            printf("PHY Link Down\r\n");
+            CONNECT_MODE = 1; // 0 = rj45 | 1 = wifi
+        }
     }
     if (intstat & GINT_STAT_SOCKET) {
         for (u8 i = 0; i < WCHNET_MAX_SOCKET_NUM; i++) {
@@ -875,50 +882,56 @@ u8 HTTP_Transceive(char *packet)
     return 1;
 }
 
-/* Request_Server: HTTP completo (header+body) robusto, com retorno u8.
- * Preserva a assinatura e o uso originais; agora envia HTTP valido. */
+
+#define HTTP_ENDPOINT  "/your_end_point"
+
 void Request_Server(char *anydata)
 {
-    if (!is_socket_connected(SocketId)) return;
+    if (!is_socket_connected(SocketId)) 
+    {
+        printf("[HTTP] Socket not connected\r\n");
+        return;
+    }
 
     int body_len = strlen(anydata);
-    if (body_len <= 0 || body_len >= (int)sizeof(REQ_NOSQL) - 256) return;
 
     int hdr_len = snprintf(REQ_NOSQL, sizeof(REQ_NOSQL),
         "POST %s HTTP/1.1\r\n"
         "Host: %s\r\n"
         "User-Agent: WCHNET/1.0\r\n"
-        "Content-Type: application/x-www-form-urlencoded\r\n"
+        "Content-Type: application/x-www-form-urlencoded\r\n"  //querystring mode
         "Content-Length: %d\r\n"
         "Connection: close\r\n"
         "\r\n",
-        HTTP_ENDPOINT, Hostname, body_len);
+        HTTP_ENDPOINT,
+        Hostname,
+        body_len);
 
-    if (hdr_len <= 0 || (hdr_len + body_len) >= (int)sizeof(REQ_NOSQL)) return;
+    if ((hdr_len + body_len) >= (int)sizeof(REQ_NOSQL)) {
+        printf("[HTTP] Payload too big (%d bytes)\r\n", hdr_len + body_len);
+        return;
+    }
 
     memcpy(REQ_NOSQL + hdr_len, anydata, body_len);
     REQ_NOSQL[hdr_len + body_len] = '\0';
 
     u32 total = hdr_len + body_len;
-    u32 sent  = 0, stall = 0;
+    u32 sent  = 0;
 
     while (sent < total) {
-        u8 unack = WCHNET_QueryUnack(SocketId, NULL, 0);
-        if (unack >= (WCHNET_NUM_TCP_SEG - 2)) {
-            WCHNET_MainTask();
-            if (WCHNET_QueryGlobalInt()) WCHNET_HandleGlobalInt();
-            Delay_Ms(5);
-            if (++stall > 600) { printf("[HTTP] Stall, abortando\r\n"); return; }
-            continue;
-        }
-        stall = 0;
-
         u32 chunk = total - sent;
         u8 ret = WCHNET_SocketSend(SocketId, (u8*)REQ_NOSQL + sent, &chunk);
-        if (ret != WCHNET_ERR_SUCCESS) { printf("[HTTP] Send error: %02X\r\n", ret); return; }
+
+        if (ret != WCHNET_ERR_SUCCESS) {
+            printf("[HTTP] Error on Sent: 0x%02X\r\n", ret);
+            return;
+        }
+
         sent += chunk;
-        Delay_Ms(1);
+        Delay_Ms(10);
     }
+
+    printf("[HTTP] Sendding %d bytes to %s\r\n", total, HTTP_ENDPOINT);
 }
 
 /* ============================================================
@@ -1242,7 +1255,8 @@ void reset_provisao(void)
  * NAO fecha socket em SYN_SENT. Chama CreateTcpSocket so a cada 5 s. */
 void task_rede(void)
 {
-    if (CONNECT_MODE == 0) {
+    if (CONNECT_MODE == 0)
+     {
         u8 zero_ip[4] = {0};
         if (memcmp(IPAddr, zero_ip, 4) == 0) return;  /* espera DHCP */
 
@@ -1279,16 +1293,18 @@ void task9(void)  { }   /* negocio */
 void task10(void) { }   /* negocio */
 void task11(void) { }   /* negocio */
 void task12(void) { }   /* negocio */
-void task13(void) { }   /* negocio */
+void task13(void) { Request_Server("{ Other Request TEST }\r\n"); }   /* negocio */
 
 /* task14: provisionamento via HTTP (Request_Server robusto). */
 void task14(void)
 {
-    char request[128] = "";
+    char request[1024] = "";
     char ind[5];
     char istoken[50]  = "";
 
-    if (PROV_POSSIBILITY < 10)
+
+
+   // if (PROV_POSSIBILITY < 10)
     {
         strcpy(request, "id-token=");
         strcat(request, TOKEN_CLIENT);
@@ -1353,7 +1369,7 @@ int main(void)
            MACAddr[0], MACAddr[1], MACAddr[2],
            MACAddr[3], MACAddr[4], MACAddr[5]);
 
-    set_hostname("192.168.101.3");
+    set_hostname("192.168.101.22");
     WCHNET_DHCPSetHostname(DHCP_HOSTNAME);
 
     u8 ret = ETH_LibInit(IPAddr, GWIPAddr, IPMask, MACAddr);
